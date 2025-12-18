@@ -61,7 +61,8 @@ module.exports = class WebDAVPersistor extends AbstractPersistor {
       const observerOptions = {
         metric: "webdav.egress", // egress from us to WebDAV
         bucket: location,
-        // Always calculate MD5 for verification or storage
+        // Always calculate MD5 for verification or storage consistency
+        // Note: This adds overhead but ensures data integrity
         hash: "md5",
       };
 
@@ -69,6 +70,8 @@ module.exports = class WebDAVPersistor extends AbstractPersistor {
 
       // For MD5 verification, we need to buffer the data
       // This is consistent with how other persistors handle MD5 verification
+      // Note: This buffers the entire file in memory, which may not be suitable
+      // for very large files, but is necessary for MD5 verification
       const chunks = [];
       const passThrough = new PassThrough();
 
@@ -94,6 +97,7 @@ module.exports = class WebDAVPersistor extends AbstractPersistor {
       }
 
       // Upload to WebDAV
+      // When ifNoneMatch === '*', set overwrite to false to prevent overwriting existing files
       await this.client.putFileContents(remotePath, buffer, {
         overwrite: opts.ifNoneMatch !== "*",
       });
@@ -132,6 +136,8 @@ module.exports = class WebDAVPersistor extends AbstractPersistor {
 
       // Return a PassThrough stream with minimal interface
       const pass = new PassThrough();
+      // Pipeline errors are handled by the pass stream's error event
+      // This is consistent with FSPersistor pattern
       pipeline(contentStream, observer, pass).catch(() => {});
       return pass;
     } catch (err) {
@@ -389,6 +395,7 @@ module.exports = class WebDAVPersistor extends AbstractPersistor {
       }
     } catch (err) {
       // Ignore errors if directory already exists
+      // 405 = Method Not Allowed (returned when directory already exists in some WebDAV implementations)
       if (err.status !== 405 && err.response?.status !== 405) {
         throw err;
       }
@@ -397,8 +404,8 @@ module.exports = class WebDAVPersistor extends AbstractPersistor {
 
   /**
    * Build a Range header for partial content requests
-   * @param {number} start - Start byte position
-   * @param {number} end - End byte position (inclusive)
+   * @param {number} start - Start byte position (0-indexed)
+   * @param {number} end - End byte position (inclusive, 0-indexed)
    * @returns {string} Range header value
    */
   _buildRangeHeader(start, end) {
@@ -407,6 +414,8 @@ module.exports = class WebDAVPersistor extends AbstractPersistor {
     } else if (start !== undefined) {
       return `bytes=${start}-`;
     } else if (end !== undefined) {
+      // Note: This requests bytes from start to end, not the last 'end' bytes
+      // In practice, start and end are typically provided together
       return `bytes=0-${end}`;
     }
     return "bytes=0-";
