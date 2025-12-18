@@ -88,6 +88,22 @@ const updateProjectSettingsSchema = z.object({
   }),
 })
 
+const webdavConfigSchema = z.object({
+  url: z.string().url().max(500),
+  username: z.string().max(200),
+  password: z.string().min(1).max(200),
+  basePath: z.string().max(200).default('/overleaf'),
+})
+
+const linkWebDAVSchema = z.object({
+  params: z.object({
+    Project_id: zz.coercedObjectId(),
+  }),
+  body: z.object({
+    webdavConfig: webdavConfigSchema,
+  }),
+})
+
 const _ProjectController = {
   _isInPercentageRollout(rolloutName, objectId, percentage) {
     if (Settings.bypassPercentageRollouts === true) {
@@ -319,11 +335,12 @@ const _ProjectController = {
         )
       : ProjectCreationHandler.promises.createBasicProject(userId, projectName))
 
-    // If webdavConfig is provided, update the project
+    // If webdavConfig is provided, validate and update the project
     if (webdavConfig && webdavConfig.url) {
+      const validatedConfig = webdavConfigSchema.parse(webdavConfig)
       await ProjectUpdateHandler.promises.setWebDAVConfig(
         project._id,
-        webdavConfig
+        validatedConfig
       )
     }
 
@@ -354,13 +371,10 @@ const _ProjectController = {
   },
 
   async linkWebDAV(req, res) {
-    const projectId = req.params.Project_id
-    const { webdavConfig } = req.body
+    const { params, body } = validateReq(req, linkWebDAVSchema)
+    const projectId = params.Project_id
+    const { webdavConfig } = body
     const userId = SessionManager.getLoggedInUserId(req.session)
-
-    if (!webdavConfig || !webdavConfig.url) {
-      return res.status(400).json({ error: 'WebDAV URL is required' })
-    }
 
     await ProjectUpdateHandler.promises.setWebDAVConfig(
       projectId,

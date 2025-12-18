@@ -64,7 +64,6 @@ function DeleteProjectModal({
       {hasWebDAVProject && (
         <div className="mb-3">
           <OLFormCheckbox
-            type="checkbox"
             label={t('keep_cloud_storage_content')}
             checked={keepCloudStorage}
             onChange={e => setKeepCloudStorage(e.target.checked)}

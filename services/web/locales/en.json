@@ -2768,6 +2768,7 @@
   "webdav_connection_test": "Test Connection",
   "webdav_password": "Password",
   "webdav_url": "WebDAV URL",
+  "webdav_url_required": "WebDAV URL is required",
   "webdav_username": "Username",
   "website_status": "Website status",
   "wed_love_you_to_stay": "We’d love you to stay",

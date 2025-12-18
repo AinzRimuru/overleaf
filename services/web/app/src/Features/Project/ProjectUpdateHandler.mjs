@@ -55,8 +55,8 @@ const ProjectUpdateHandler = {
   async unsetWebDAVConfig(projectId) {
     const conditions = { _id: projectId }
     const update = {
-      webdavConfig: {
-        enabled: false,
+      $unset: {
+        webdavConfig: '',
       },
     }
     await Project.updateOne(conditions, update, {}).exec()

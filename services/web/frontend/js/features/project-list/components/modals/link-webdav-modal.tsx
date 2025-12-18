@@ -38,7 +38,7 @@ function LinkWebDAVModal({
 
   const handleSubmit = async () => {
     if (!webdavUrl.trim()) {
-      setError(t('webdav_url') + ' is required')
+      setError(t('webdav_url_required'))
       return
     }
 
