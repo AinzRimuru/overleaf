@@ -9,6 +9,7 @@ Contains a workaround within the GCS backend to allow lifecycle rules to keep ob
 - S3
 - GCS
 - Filesystem (FS)
+- WebDAV (including Nextcloud)
 
 ## Getting started
 
@@ -248,7 +249,7 @@ An object with the relevant configuration should be passed to the main function 
 
 ### Common parameters
 
-- `backend` (required): String specifying the primary persistor to use as the storage backend. Must be one of `s3`, `gcs` or `fs`.
+- `backend` (required): String specifying the primary persistor to use as the storage backend. Must be one of `s3`, `gcs`, `fs`, or `webdav`.
 - `signedUrlExpiryInMs`: Time before expiry (in milliseconds) of signed URLs
 
 ### FS-specific parameters
@@ -298,6 +299,44 @@ GCS authentication is configured automatically via the local service account, or
 In order to support deletion after a period, the GCS persistor allows usage of a two-bucket system. The main bucket contains the live objects, and on delete the objects are first copied to a 'deleted' bucket, and then deleted from the main one. The 'deleted' bucket is then expected to have a lifecycle policy applied to delete objects after a set period.
 
 In order to prevent accidental deletion from outside this mechanism, an event-based-hold can be applied by default on the main bucket. This will be unlocked _after_ the object has been copied to the 'deleted' bucket so that the object can then be deleted from the main bucket.
+
+### WebDAV-specific parameters
+
+- `webdav.url` (required): The WebDAV server URL. For Nextcloud, this typically includes the path to the WebDAV endpoint, e.g., `https://nextcloud.example.com/remote.php/dav/files/username/`
+- `webdav.username` (required): Username for WebDAV authentication
+- `webdav.password` (required): Password for WebDAV authentication
+- `webdav.basePath`: Base path for storing files on the WebDAV server. Defaults to `/overleaf`. All files will be stored under this path.
+
+#### Example configuration for Nextcloud
+
+```javascript
+const config = {
+  backend: 'webdav',
+  webdav: {
+    url: 'https://nextcloud.example.com/remote.php/dav/files/myusername/',
+    username: 'myusername',
+    password: 'my-app-password',
+    basePath: '/overleaf'
+  }
+}
+```
+
+Or using environment variables:
+
+```bash
+BACKEND=webdav
+WEBDAV_URL=https://nextcloud.example.com/remote.php/dav/files/myusername/
+WEBDAV_USERNAME=myusername
+WEBDAV_PASSWORD=my-app-password
+WEBDAV_BASE_PATH=/overleaf
+```
+
+#### Notes
+
+- For the `WebDAV` persistor, the `bucketName` parameter in method calls is used as a directory name under the `basePath`.
+- WebDAV does not support signed URLs, so `getRedirectUrl()` always returns `null`.
+- It's recommended to use app-specific passwords when using Nextcloud or other services that support them.
+- The WebDAV persistor has been tested with Nextcloud but should work with any WebDAV-compliant server.
 
 ## Contributing
 

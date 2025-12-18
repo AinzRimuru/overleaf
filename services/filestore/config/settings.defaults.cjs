@@ -38,6 +38,7 @@ const settings = {
     // s3 - Amazon S3
     // fs - local filesystem
     // gcs - Google Cloud Storage
+    // webdav - WebDAV (e.g., Nextcloud)
     backend: process.env.BACKEND,
 
     gcs: {
@@ -62,6 +63,13 @@ const settings = {
       bucketCreds: process.env.S3_BUCKET_CREDENTIALS
         ? JSON.parse(process.env.S3_BUCKET_CREDENTIALS)
         : undefined,
+    },
+
+    webdav: {
+      url: process.env.WEBDAV_URL, // e.g., https://nextcloud.example.com/remote.php/dav/files/username/
+      username: process.env.WEBDAV_USERNAME,
+      password: process.env.WEBDAV_PASSWORD,
+      basePath: process.env.WEBDAV_BASE_PATH || '/overleaf',
     },
 
     // GCS should be configured by the service account on the kubernetes pod. See GOOGLE_APPLICATION_CREDENTIALS,
