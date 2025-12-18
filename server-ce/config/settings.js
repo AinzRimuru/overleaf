@@ -435,10 +435,11 @@ if (process.env.OVERLEAF_ELASTICSEARCH_URL != null) {
 }
 
 // filestore
+// Storage backend is now configured at the project level.
+// Configure backend-specific settings below.
 switch (process.env.OVERLEAF_FILESTORE_BACKEND) {
   case 's3':
     settings.filestore = {
-      backend: 's3',
       stores: {
         template_files:
           process.env.OVERLEAF_FILESTORE_TEMPLATE_FILES_BUCKET_NAME,
@@ -462,7 +463,6 @@ switch (process.env.OVERLEAF_FILESTORE_BACKEND) {
     break
   default:
     settings.filestore = {
-      backend: 'fs',
       stores: {
         template_files: Path.join(DATA_DIR, 'template_files'),
 
