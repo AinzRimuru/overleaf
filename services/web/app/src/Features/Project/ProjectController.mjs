@@ -310,7 +310,7 @@ const _ProjectController = {
     } = currentUser
     const projectName =
       req.body.projectName != null ? req.body.projectName.trim() : undefined
-    const { template } = req.body
+    const { template, webdavConfig } = req.body
 
     const project = await (template === 'example'
       ? ProjectCreationHandler.promises.createExampleProject(
@@ -318,6 +318,14 @@ const _ProjectController = {
           projectName
         )
       : ProjectCreationHandler.promises.createBasicProject(userId, projectName))
+
+    // If webdavConfig is provided, update the project
+    if (webdavConfig && webdavConfig.url) {
+      await ProjectUpdateHandler.promises.setWebDAVConfig(
+        project._id,
+        webdavConfig
+      )
+    }
 
     ProjectAuditLogHandler.addEntryIfManagedInBackground(
       project._id,
@@ -342,6 +350,46 @@ const _ProjectController = {
     const projectId = req.params.Project_id
     const newName = req.body.newProjectName
     await EditorController.promises.renameProject(projectId, newName)
+    res.sendStatus(200)
+  },
+
+  async linkWebDAV(req, res) {
+    const projectId = req.params.Project_id
+    const { webdavConfig } = req.body
+    const userId = SessionManager.getLoggedInUserId(req.session)
+
+    if (!webdavConfig || !webdavConfig.url) {
+      return res.status(400).json({ error: 'WebDAV URL is required' })
+    }
+
+    await ProjectUpdateHandler.promises.setWebDAVConfig(
+      projectId,
+      webdavConfig
+    )
+
+    ProjectAuditLogHandler.addEntryIfManagedInBackground(
+      projectId,
+      'webdav-linked',
+      userId,
+      req.ip
+    )
+
+    res.sendStatus(200)
+  },
+
+  async unlinkWebDAV(req, res) {
+    const projectId = req.params.Project_id
+    const userId = SessionManager.getLoggedInUserId(req.session)
+
+    await ProjectUpdateHandler.promises.unsetWebDAVConfig(projectId)
+
+    ProjectAuditLogHandler.addEntryIfManagedInBackground(
+      projectId,
+      'webdav-unlinked',
+      userId,
+      req.ip
+    )
+
     res.sendStatus(200)
   },
 
@@ -1377,6 +1425,7 @@ const ProjectController = {
   expireDeletedProjectsAfterDuration: expressify(
     _ProjectController.expireDeletedProjectsAfterDuration
   ),
+  linkWebDAV: expressify(_ProjectController.linkWebDAV),
   loadEditor: expressify(_ProjectController.loadEditor),
   newProject: expressify(_ProjectController.newProject),
   projectEntitiesJson: expressify(_ProjectController.projectEntitiesJson),
@@ -1384,6 +1433,7 @@ const ProjectController = {
   restoreProject: expressify(_ProjectController.restoreProject),
   trashProject: expressify(_ProjectController.trashProject),
   unarchiveProject: expressify(_ProjectController.unarchiveProject),
+  unlinkWebDAV: expressify(_ProjectController.unlinkWebDAV),
   untrashProject: expressify(_ProjectController.untrashProject),
   updateProjectAdminSettings: expressify(
     _ProjectController.updateProjectAdminSettings

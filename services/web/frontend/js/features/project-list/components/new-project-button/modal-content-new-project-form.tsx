@@ -19,6 +19,7 @@ import OLButton from '@/shared/components/ol/ol-button'
 import OLForm from '@/shared/components/ol/ol-form'
 import OLFormLabel from '@/shared/components/ol/ol-form-label'
 import OLFormGroup from '@/shared/components/ol/ol-form-group'
+import { Collapse } from 'react-bootstrap'
 
 type NewProjectData = {
   project_id: string
@@ -41,16 +42,42 @@ function ModalContentNewProjectForm({ onCancel, template = 'none' }: Props) {
   const { autoFocusedRef } = useRefWithAutoFocus<HTMLInputElement>()
   const [projectName, setProjectName] = useState('')
   const [redirecting, setRedirecting] = useState(false)
+  const [showWebDAVConfig, setShowWebDAVConfig] = useState(false)
+  const [webdavUrl, setWebdavUrl] = useState('')
+  const [webdavUsername, setWebdavUsername] = useState('')
+  const [webdavPassword, setWebdavPassword] = useState('')
+  const [webdavBasePath, setWebdavBasePath] = useState('/overleaf')
   const { isLoading, isError, error, runAsync } = useAsync<NewProjectData>()
   const location = useLocation()
 
   const createNewProject = () => {
+    const body: {
+      projectName: string
+      template: string
+      webdavConfig?: {
+        url: string
+        username: string
+        password: string
+        basePath: string
+      }
+    } = {
+      projectName,
+      template,
+    }
+
+    // Include webdavConfig only if URL is provided
+    if (webdavUrl.trim()) {
+      body.webdavConfig = {
+        url: webdavUrl.trim(),
+        username: webdavUsername.trim(),
+        password: webdavPassword,
+        basePath: webdavBasePath.trim() || '/overleaf',
+      }
+    }
+
     runAsync(
       postJSON('/project/new', {
-        body: {
-          projectName,
-          template,
-        },
+        body,
       })
     )
       .then(data => {
@@ -97,6 +124,59 @@ function ModalContentNewProjectForm({ onCancel, template = 'none' }: Props) {
               value={projectName}
             />
           </OLFormGroup>
+
+          <div className="mb-3">
+            <button
+              type="button"
+              className="btn btn-link p-0"
+              onClick={() => setShowWebDAVConfig(!showWebDAVConfig)}
+              aria-expanded={showWebDAVConfig}
+            >
+              {showWebDAVConfig ? '▼' : '▶'} {t('cloud_storage_optional')}
+            </button>
+          </div>
+
+          <Collapse in={showWebDAVConfig}>
+            <div>
+              <OLFormGroup controlId="webdav-url">
+                <OLFormLabel>{t('webdav_url')}</OLFormLabel>
+                <OLFormControl
+                  type="text"
+                  placeholder="https://nextcloud.example.com/remote.php/dav/files/username/"
+                  value={webdavUrl}
+                  onChange={e => setWebdavUrl(e.target.value)}
+                />
+              </OLFormGroup>
+
+              <OLFormGroup controlId="webdav-username">
+                <OLFormLabel>{t('webdav_username')}</OLFormLabel>
+                <OLFormControl
+                  type="text"
+                  value={webdavUsername}
+                  onChange={e => setWebdavUsername(e.target.value)}
+                />
+              </OLFormGroup>
+
+              <OLFormGroup controlId="webdav-password">
+                <OLFormLabel>{t('webdav_password')}</OLFormLabel>
+                <OLFormControl
+                  type="password"
+                  value={webdavPassword}
+                  onChange={e => setWebdavPassword(e.target.value)}
+                />
+              </OLFormGroup>
+
+              <OLFormGroup controlId="webdav-base-path">
+                <OLFormLabel>{t('webdav_base_path')}</OLFormLabel>
+                <OLFormControl
+                  type="text"
+                  value={webdavBasePath}
+                  onChange={e => setWebdavBasePath(e.target.value)}
+                  placeholder="/overleaf"
+                />
+              </OLFormGroup>
+            </div>
+          </Collapse>
         </OLForm>
       </OLModalBody>
 

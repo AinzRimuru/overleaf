@@ -36,6 +36,31 @@ const ProjectUpdateHandler = {
     const update = { active: true }
     await Project.updateOne(conditions, update, {}).exec()
   },
+
+  async setWebDAVConfig(projectId, webdavConfig) {
+    const conditions = { _id: projectId }
+    const update = {
+      webdavConfig: {
+        url: webdavConfig.url,
+        username: webdavConfig.username,
+        password: webdavConfig.password,
+        basePath: webdavConfig.basePath || '/overleaf',
+        enabled: true,
+        lastSyncDate: new Date(),
+      },
+    }
+    await Project.updateOne(conditions, update, {}).exec()
+  },
+
+  async unsetWebDAVConfig(projectId) {
+    const conditions = { _id: projectId }
+    const update = {
+      webdavConfig: {
+        enabled: false,
+      },
+    }
+    await Project.updateOne(conditions, update, {}).exec()
+  },
 }
 
 export default {
@@ -43,5 +68,7 @@ export default {
   markAsOpened: callbackify(ProjectUpdateHandler.markAsOpened),
   markAsInactive: callbackify(ProjectUpdateHandler.markAsInactive),
   markAsActive: callbackify(ProjectUpdateHandler.markAsActive),
+  setWebDAVConfig: callbackify(ProjectUpdateHandler.setWebDAVConfig),
+  unsetWebDAVConfig: callbackify(ProjectUpdateHandler.unsetWebDAVConfig),
   promises: ProjectUpdateHandler,
 }
