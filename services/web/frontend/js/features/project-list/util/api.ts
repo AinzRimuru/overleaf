@@ -80,3 +80,21 @@ export function unarchiveProject(projectId: string) {
 export function untrashProject(projectId: string) {
   return deleteJSON(`/project/${projectId}/trash`)
 }
+
+export function linkWebDAV(
+  projectId: string,
+  webdavConfig: {
+    url: string
+    username: string
+    password: string
+    basePath: string
+  }
+) {
+  return postJSON(`/project/${projectId}/webdav/link`, {
+    body: { webdavConfig },
+  })
+}
+
+export function unlinkWebDAV(projectId: string) {
+  return postJSON(`/project/${projectId}/webdav/unlink`)
+}

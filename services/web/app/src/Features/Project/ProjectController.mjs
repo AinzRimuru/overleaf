@@ -88,6 +88,22 @@ const updateProjectSettingsSchema = z.object({
   }),
 })
 
+const webdavConfigSchema = z.object({
+  url: z.string().url().max(500),
+  username: z.string().max(200),
+  password: z.string().min(1).max(200),
+  basePath: z.string().max(200).default('/overleaf'),
+})
+
+const linkWebDAVSchema = z.object({
+  params: z.object({
+    Project_id: zz.coercedObjectId(),
+  }),
+  body: z.object({
+    webdavConfig: webdavConfigSchema,
+  }),
+})
+
 const _ProjectController = {
   _isInPercentageRollout(rolloutName, objectId, percentage) {
     if (Settings.bypassPercentageRollouts === true) {
@@ -310,7 +326,7 @@ const _ProjectController = {
     } = currentUser
     const projectName =
       req.body.projectName != null ? req.body.projectName.trim() : undefined
-    const { template } = req.body
+    const { template, webdavConfig } = req.body
 
     const project = await (template === 'example'
       ? ProjectCreationHandler.promises.createExampleProject(
@@ -318,6 +334,15 @@ const _ProjectController = {
           projectName
         )
       : ProjectCreationHandler.promises.createBasicProject(userId, projectName))
+
+    // If webdavConfig is provided, validate and update the project
+    if (webdavConfig && webdavConfig.url) {
+      const validatedConfig = webdavConfigSchema.parse(webdavConfig)
+      await ProjectUpdateHandler.promises.setWebDAVConfig(
+        project._id,
+        validatedConfig
+      )
+    }
 
     ProjectAuditLogHandler.addEntryIfManagedInBackground(
       project._id,
@@ -342,6 +367,43 @@ const _ProjectController = {
     const projectId = req.params.Project_id
     const newName = req.body.newProjectName
     await EditorController.promises.renameProject(projectId, newName)
+    res.sendStatus(200)
+  },
+
+  async linkWebDAV(req, res) {
+    const { params, body } = validateReq(req, linkWebDAVSchema)
+    const projectId = params.Project_id
+    const { webdavConfig } = body
+    const userId = SessionManager.getLoggedInUserId(req.session)
+
+    await ProjectUpdateHandler.promises.setWebDAVConfig(
+      projectId,
+      webdavConfig
+    )
+
+    ProjectAuditLogHandler.addEntryIfManagedInBackground(
+      projectId,
+      'webdav-linked',
+      userId,
+      req.ip
+    )
+
+    res.sendStatus(200)
+  },
+
+  async unlinkWebDAV(req, res) {
+    const projectId = req.params.Project_id
+    const userId = SessionManager.getLoggedInUserId(req.session)
+
+    await ProjectUpdateHandler.promises.unsetWebDAVConfig(projectId)
+
+    ProjectAuditLogHandler.addEntryIfManagedInBackground(
+      projectId,
+      'webdav-unlinked',
+      userId,
+      req.ip
+    )
+
     res.sendStatus(200)
   },
 
@@ -1377,6 +1439,7 @@ const ProjectController = {
   expireDeletedProjectsAfterDuration: expressify(
     _ProjectController.expireDeletedProjectsAfterDuration
   ),
+  linkWebDAV: expressify(_ProjectController.linkWebDAV),
   loadEditor: expressify(_ProjectController.loadEditor),
   newProject: expressify(_ProjectController.newProject),
   projectEntitiesJson: expressify(_ProjectController.projectEntitiesJson),
@@ -1384,6 +1447,7 @@ const ProjectController = {
   restoreProject: expressify(_ProjectController.restoreProject),
   trashProject: expressify(_ProjectController.trashProject),
   unarchiveProject: expressify(_ProjectController.unarchiveProject),
+  unlinkWebDAV: expressify(_ProjectController.unlinkWebDAV),
   untrashProject: expressify(_ProjectController.untrashProject),
   updateProjectAdminSettings: expressify(
     _ProjectController.updateProjectAdminSettings

@@ -103,6 +103,14 @@ export const ProjectSchema = new Schema(
       },
     ],
     deferredTpdsFlushCounter: { type: Number },
+    webdavConfig: {
+      url: { type: String },
+      username: { type: String },
+      password: { type: String },
+      basePath: { type: String, default: '/overleaf' },
+      enabled: { type: Boolean, default: false },
+      lastSyncDate: { type: Date },
+    },
   },
   { minimize: false }
 )
