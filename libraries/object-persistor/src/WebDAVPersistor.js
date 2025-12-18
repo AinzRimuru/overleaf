@@ -61,13 +61,9 @@ module.exports = class WebDAVPersistor extends AbstractPersistor {
       const observerOptions = {
         metric: "webdav.egress", // egress from us to WebDAV
         bucket: location,
+        // Always calculate MD5 for verification or storage
+        hash: "md5",
       };
-
-      let sourceMd5 = opts.sourceMd5;
-      if (!sourceMd5) {
-        // Calculate MD5 as data passes through if not provided
-        observerOptions.hash = "md5";
-      }
 
       const observer = new PersistorHelper.ObserverStream(observerOptions);
 
