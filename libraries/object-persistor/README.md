@@ -321,10 +321,12 @@ const config = {
 }
 ```
 
-Or using environment variables:
+Or using environment variables (for library configuration):
 
 ```bash
-BACKEND=webdav
+# Note: These are library-level configuration variables.
+# In Overleaf, storage backends are configured at the project level.
+# See the Overleaf documentation for project-level storage configuration.
 WEBDAV_URL=https://nextcloud.example.com/remote.php/dav/files/myusername/
 WEBDAV_USERNAME=myusername
 WEBDAV_PASSWORD=my-app-password

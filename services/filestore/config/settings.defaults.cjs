@@ -9,21 +9,6 @@ if (process.env.AWS_SECRET && !process.env.AWS_SECRET_ACCESS_KEY) {
   process.env.AWS_SECRET_ACCESS_KEY = process.env.AWS_SECRET
 }
 
-// pre-backend setting, fall back to old behaviour
-if (process.env.BACKEND == null) {
-  if (process.env.AWS_ACCESS_KEY_ID || process.env.S3_BUCKET_CREDENTIALS) {
-    process.env.BACKEND = 's3'
-    process.env.TEMPLATE_FILES_BUCKET_NAME =
-      process.env.AWS_S3_TEMPLATE_FILES_BUCKET_NAME
-  } else {
-    process.env.BACKEND = 'fs'
-    process.env.TEMPLATE_FILES_BUCKET_NAME = Path.join(
-      __dirname,
-      '../template_files'
-    )
-  }
-}
-
 const settings = {
   internal: {
     filestore: {
@@ -33,13 +18,8 @@ const settings = {
   },
 
   filestore: {
-    // Which backend persistor to use.
-    // Choices are
-    // s3 - Amazon S3
-    // fs - local filesystem
-    // gcs - Google Cloud Storage
-    // webdav - WebDAV (e.g., Nextcloud)
-    backend: process.env.BACKEND,
+    // Storage backends are now configured at the project level.
+    // Each backend type (s3, gcs, webdav, fs) can be configured below.
 
     gcs: {
       endpoint: process.env.GCS_API_ENDPOINT

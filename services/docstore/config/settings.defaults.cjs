@@ -24,7 +24,7 @@ const Settings = {
     keepSoftDeletedDocsArchived:
       process.env.KEEP_SOFT_DELETED_DOCS_ARCHIVED === 'true',
 
-    backend: process.env.BACKEND,
+    // Storage backend is now configured at the project level
     healthCheck: {
       project_id: process.env.HEALTH_CHECK_PROJECT_ID,
     },
