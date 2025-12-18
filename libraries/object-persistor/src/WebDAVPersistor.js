@@ -3,7 +3,7 @@ const { pipeline } = require("node:stream/promises");
 const { PassThrough } = require("node:stream");
 const { createClient } = require("webdav");
 const AbstractPersistor = require("./AbstractPersistor");
-const { ReadError, WriteError, NotFoundError } = require("./Errors");
+const { ReadError, WriteError } = require("./Errors");
 const PersistorHelper = require("./PersistorHelper");
 
 module.exports = class WebDAVPersistor extends AbstractPersistor {
@@ -71,9 +71,10 @@ module.exports = class WebDAVPersistor extends AbstractPersistor {
 
       const observer = new PersistorHelper.ObserverStream(observerOptions);
 
-      // Create a PassThrough stream to collect data
-      const passThrough = new PassThrough();
+      // For MD5 verification, we need to buffer the data
+      // This is consistent with how other persistors handle MD5 verification
       const chunks = [];
+      const passThrough = new PassThrough();
 
       passThrough.on("data", (chunk) => {
         chunks.push(chunk);
@@ -85,22 +86,21 @@ module.exports = class WebDAVPersistor extends AbstractPersistor {
       // Combine chunks into a buffer
       const buffer = Buffer.concat(chunks);
 
-      // Upload to WebDAV
-      await this.client.putFileContents(remotePath, buffer, {
-        overwrite: opts.ifNoneMatch !== "*",
-      });
-
       // Verify MD5 if provided
       if (opts.sourceMd5) {
         const actualMd5 = observer.getHash();
         if (actualMd5 !== opts.sourceMd5) {
-          await this.deleteObject(location, target);
           throw new WriteError("md5 hash mismatch", {
             expectedMd5: opts.sourceMd5,
             actualMd5,
           });
         }
       }
+
+      // Upload to WebDAV
+      await this.client.putFileContents(remotePath, buffer, {
+        overwrite: opts.ifNoneMatch !== "*",
+      });
     } catch (err) {
       throw PersistorHelper.wrapError(
         err,
