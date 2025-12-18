@@ -26,7 +26,7 @@ function DeleteProjectModal({
 
   // Check if any project has WebDAV enabled
   const hasWebDAVProject = projects.some(
-    project => (project as any).webdavConfig?.enabled
+    project => project.webdavConfig?.enabled
   )
 
   useEffect(() => {
@@ -41,7 +41,7 @@ function DeleteProjectModal({
   }, [showModal, projects])
 
   const handleAction = async (project: Project) => {
-    if (keepCloudStorage && (project as any).webdavConfig?.enabled) {
+    if (keepCloudStorage && project.webdavConfig?.enabled) {
       // Call unlink instead of delete
       await unlinkWebDAV(project.id)
     } else {
