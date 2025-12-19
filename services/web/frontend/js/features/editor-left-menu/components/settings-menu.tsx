@@ -20,6 +20,7 @@ import importOverleafModules from '../../../../macros/import-overleaf-module.mac
 import { ElementType } from 'react'
 import OLForm from '@/shared/components/ol/ol-form'
 import SettingsNewEditor from './settings/settings-new-editor'
+import SettingsWebDAV from './settings/settings-webdav'
 
 const moduleSettings: Array<{
   import: { default: ElementType }
@@ -58,6 +59,8 @@ export default function SettingsMenu() {
         <SettingsLineHeight />
         <SettingsPdfViewer />
         <SettingsNewEditor />
+        <hr />
+        <SettingsWebDAV />
       </OLForm>
     </>
   )

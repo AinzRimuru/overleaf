@@ -22,6 +22,7 @@ import EditorRealTimeController from '../Editor/EditorRealTimeController.mjs'
 import HistoryManager from '../History/HistoryManager.mjs'
 import ChatApiHandler from '../Chat/ChatApiHandler.mjs'
 import { promiseMapWithLimit } from '@overleaf/promise-utils'
+import WebDAVProjectHandler from '../WebDAV/WebDAVProjectHandler.mjs'
 
 const PROJECT_EXPIRATION_BATCH_SIZE = 10000
 
@@ -177,6 +178,35 @@ async function deleteProject(projectId, options = {}) {
     const project = await Project.findOne({ _id: projectId }).exec()
     if (!project) {
       throw new Errors.NotFoundError('project not found')
+    }
+
+    // Handle WebDAV unlinking if enabled
+    if (project.webdav && project.webdav.enabled) {
+      const unlinkOnly = options.unlinkOnly === true
+      const deleteRemote = !unlinkOnly
+
+      try {
+        await WebDAVProjectHandler.promises.unlinkProjectFromWebDAV(
+          projectId,
+          deleteRemote
+        )
+        logger.info(
+          { projectId, unlinkOnly, deleteRemote },
+          'handled WebDAV during project deletion'
+        )
+      } catch (err) {
+        logger.warn(
+          { err, projectId },
+          'failed to handle WebDAV during project deletion'
+        )
+        // Continue with deletion even if WebDAV handling fails
+      }
+
+      // If unlinkOnly, just unlink and return without deleting the project
+      if (unlinkOnly) {
+        logger.info({ projectId }, 'unlinked WebDAV without deleting project')
+        return
+      }
     }
 
     await DocumentUpdaterHandler.promises.flushProjectToMongoAndDelete(

@@ -4,6 +4,7 @@ const GcsPersistor = require('./GcsPersistor')
 const { S3Persistor } = require('./S3Persistor')
 const FSPersistor = require('./FSPersistor')
 const MigrationPersistor = require('./MigrationPersistor')
+const WebDAVPersistor = require('./WebDAVPersistor')
 const {
   PerProjectEncryptedS3Persistor,
 } = require('./PerProjectEncryptedS3Persistor')
@@ -22,6 +23,8 @@ function getPersistor(backend, settings) {
       })
     case 'gcs':
       return new GcsPersistor(settings.gcs)
+    case 'webdav':
+      return new WebDAVPersistor(settings.webdav)
     default:
       throw new SettingsError('unknown backend', { backend })
   }

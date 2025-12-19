@@ -23,6 +23,7 @@ import FileWriter from '../../infrastructure/FileWriter.mjs'
 import EditorRealTimeController from '../Editor/EditorRealTimeController.mjs'
 import { callbackifyMultiResult, callbackify } from '@overleaf/promise-utils'
 import { iterablePaths } from './IterablePath.mjs'
+import WebDAVSyncService from '../WebDAV/WebDAVSyncService.mjs'
 
 const LOCK_NAMESPACE = 'sequentialProjectStructureUpdateLock'
 const VALID_ROOT_DOC_EXTENSIONS = Settings.validRootDocExtensions
@@ -170,7 +171,7 @@ async function updateDocLines(
   logger.debug({ projectId, docId }, 'telling docstore manager to update doc')
   let modified, rev
   try {
-    ;({ modified, rev } = await DocstoreManager.promises.updateDoc(
+    ; ({ modified, rev } = await DocstoreManager.promises.updateDoc(
       projectId,
       docId,
       lines,
@@ -198,6 +199,14 @@ async function updateDocLines(
     rev,
     folderId: folder?._id,
   })
+
+  // Sync to WebDAV if enabled
+  WebDAVSyncService.promises
+    .syncDocument(projectId, docId, path)
+    .catch(err => {
+      logger.warn({ err, projectId, docId }, 'WebDAV sync failed after doc update')
+    })
+
   return { rev, modified }
 }
 
@@ -313,6 +322,16 @@ const addDocWithRanges = wrapWithLock({
       { newDocs, newProject: project },
       source
     )
+
+    // Sync to WebDAV if enabled
+    if (docPath) {
+      WebDAVSyncService.promises
+        .syncDocument(projectId, doc._id, docPath)
+        .catch(err => {
+          logger.warn({ err, projectId, docId: doc._id }, 'WebDAV sync failed')
+        })
+    }
+
     return { doc, folderId: folderId || project.rootFolder[0]._id }
   },
 })
@@ -378,6 +397,17 @@ const addFile = wrapWithLock({
       { newFiles, newProject: project },
       source
     )
+
+    // Sync to WebDAV if enabled
+    const filePath = result && result.path && result.path.fileSystem
+    if (filePath && fileRef.hash) {
+      WebDAVSyncService.promises
+        .syncFile(projectId, fileRef._id, filePath, fileRef.hash)
+        .catch(err => {
+          logger.warn({ err, projectId, fileId: fileRef._id }, 'WebDAV sync failed')
+        })
+    }
+
     return { fileRef, folderId, createdBlob }
   },
 })
@@ -389,7 +419,7 @@ const upsertDoc = wrapWithLock(
     }
     let element, folderPath
     try {
-      ;({ element, path: folderPath } =
+      ; ({ element, path: folderPath } =
         await ProjectLocator.promises.findElement({
           project_id: projectId,
           element_id: folderId,
@@ -572,7 +602,7 @@ const upsertFile = wrapWithLock({
   }) {
     let element
     try {
-      ;({ element } = await ProjectLocator.promises.findElement({
+      ; ({ element } = await ProjectLocator.promises.findElement({
         project_id: projectId,
         element_id: folderId,
         type: 'folder',
@@ -593,7 +623,7 @@ const upsertFile = wrapWithLock({
     if (existingDoc) {
       let path
       try {
-        ;({ path } = await ProjectLocator.promises.findElement({
+        ; ({ path } = await ProjectLocator.promises.findElement({
           project_id: projectId,
           element_id: existingDoc._id,
           type: 'doc',
@@ -825,6 +855,13 @@ const deleteEntity = wrapWithLock(
       entityType,
       subtreeEntityIds,
     })
+
+    // Delete from WebDAV if enabled
+    WebDAVSyncService.promises
+      .deleteFromWebDAV(projectId, path.fileSystem)
+      .catch(err => {
+        logger.warn({ err, projectId, entityId }, 'WebDAV delete failed')
+      })
 
     return entityId
   }
@@ -1267,7 +1304,7 @@ const ProjectEntityUpdateHandler = {
   async _addDocAndSendToTpds(projectId, folderId, doc, userId) {
     let result, project
     try {
-      ;({ result, project } =
+      ; ({ result, project } =
         await ProjectEntityMongoUpdateHandler.promises.addDoc(
           projectId,
           folderId,
@@ -1320,7 +1357,7 @@ const ProjectEntityUpdateHandler = {
   async _addFileAndSendToTpds(projectId, folderId, fileRef, userId) {
     let result, project
     try {
-      ;({ result, project } =
+      ; ({ result, project } =
         await ProjectEntityMongoUpdateHandler.promises.addFile(
           projectId,
           folderId,
@@ -1407,6 +1444,15 @@ const ProjectEntityUpdateHandler = {
       { oldFiles, newFiles, newProject },
       source
     )
+
+    // Sync to WebDAV if enabled
+    if (updatedFileRef.hash) {
+      WebDAVSyncService.promises
+        .syncFile(projectId, updatedFileRef._id, path.fileSystem, updatedFileRef.hash)
+        .catch(err => {
+          logger.warn({ err, projectId, fileId: updatedFileRef._id }, 'WebDAV sync failed after file replace')
+        })
+    }
 
     return updatedFileRef
   },

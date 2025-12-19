@@ -65,6 +65,7 @@ import { plainTextResponse } from './infrastructure/Response.mjs'
 import SocketDiagnostics from './Features/SocketDiagnostics/SocketDiagnostics.mjs'
 import ClsiCacheController from './Features/Compile/ClsiCacheController.mjs'
 import AsyncLocalStorage from './infrastructure/AsyncLocalStorage.mjs'
+import WebDAVController from './Features/WebDAV/WebDAVController.mjs'
 
 const { renderUnsupportedBrowserPage, unsupportedBrowserMiddleware } =
   UnsupportedBrowserMiddleware
@@ -714,6 +715,38 @@ async function initialize(webRouter, privateApiRouter, publicApiRouter) {
     AuthorizationMiddleware.ensureUserCanAdminProject,
     ProjectController.renameProject
   )
+
+  // WebDAV routes
+  webRouter.post(
+    '/project/:Project_id/webdav/link',
+    AuthenticationController.requireLogin(),
+    AuthorizationMiddleware.ensureUserCanWriteProjectSettings,
+    WebDAVController.linkProject
+  )
+  webRouter.post(
+    '/project/:Project_id/webdav/unlink',
+    AuthenticationController.requireLogin(),
+    AuthorizationMiddleware.ensureUserCanWriteProjectSettings,
+    WebDAVController.unlinkProject
+  )
+  webRouter.post(
+    '/project/:Project_id/webdav/sync',
+    AuthenticationController.requireLogin(),
+    AuthorizationMiddleware.ensureUserCanWriteProjectSettings,
+    WebDAVController.syncProject
+  )
+  webRouter.get(
+    '/project/:Project_id/webdav/status',
+    AuthenticationController.requireLogin(),
+    AuthorizationMiddleware.ensureUserCanReadProject,
+    WebDAVController.getStatus
+  )
+  webRouter.post(
+    '/project/:Project_id/webdav/test',
+    AuthenticationController.requireLogin(),
+    WebDAVController.testConnection
+  )
+
   webRouter.post(
     '/project/:project_id/export/:brand_variation_id',
     AuthorizationMiddleware.ensureUserCanWriteProjectContent,
@@ -751,8 +784,8 @@ async function initialize(webRouter, privateApiRouter, publicApiRouter) {
     AuthorizationMiddleware.ensureUserCanReadProject,
     Settings.allowAnonymousReadAndWriteSharing
       ? (req, res, next) => {
-          next()
-        }
+        next()
+      }
       : AuthenticationController.requireLogin(),
     MetaController.getMetadata
   )
@@ -761,8 +794,8 @@ async function initialize(webRouter, privateApiRouter, publicApiRouter) {
     AuthorizationMiddleware.ensureUserCanReadProject,
     Settings.allowAnonymousReadAndWriteSharing
       ? (req, res, next) => {
-          next()
-        }
+        next()
+      }
       : AuthenticationController.requireLogin(),
     MetaController.broadcastMetadataForDoc
   )
@@ -1149,12 +1182,12 @@ async function initialize(webRouter, privateApiRouter, publicApiRouter) {
         // Force every compile to a new server and do not leave cruft behind.
         CompileManager.promises
           .deleteAuxFiles(projectId, testUserId, clsiServerId)
-          .catch(() => {})
+          .catch(() => { })
       })
       let handler = setTimeout(function () {
         CompileManager.promises
           .stopCompile(projectId, testUserId)
-          .catch(() => {})
+          .catch(() => { })
         sendRes(500, 'Compiler timed out')
         handler = null
       }, 10000)

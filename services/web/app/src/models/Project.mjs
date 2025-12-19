@@ -89,6 +89,20 @@ export const ProjectSchema = new Schema(
         otMigrationStage: { type: Number },
       },
     },
+    webdav: {
+      enabled: { type: Boolean, default: false },
+      url: { type: String },
+      username: { type: String },
+      password: { type: String }, // Encrypted
+      basePath: { type: String },
+      syncStatus: {
+        lastSyncAt: { type: Date },
+        lastSyncError: { type: String },
+        isSyncing: { type: Boolean, default: false },
+      },
+      linkedAt: { type: Date },
+      unlinkedAt: { type: Date },
+    },
     collabratecUsers: [
       {
         user_id: { type: ObjectId, ref: 'User' },

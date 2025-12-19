@@ -1,0 +1,81 @@
+services:
+    sharelatex:
+        restart: always
+        image: sharelatex/sharelatex:main
+        container_name: sharelatex
+        depends_on:
+            mongo:
+                condition: service_healthy
+            redis:
+                condition: service_started
+        ports:
+            - 6080:80
+        stop_grace_period: 60s
+        volumes:
+            - sharelatex_data:/var/lib/overleaf
+        environment:
+            OVERLEAF_APP_NAME: Overleaf Community Edition
+            OVERLEAF_MONGO_URL: mongodb://mongo/sharelatex
+            OVERLEAF_REDIS_HOST: redis
+            REDIS_HOST: redis
+            ENABLED_LINKED_FILE_TYPES: 'project_file,project_output_file'
+            ENABLE_CONVERSIONS: 'true'
+            EMAIL_CONFIRMATION_DISABLED: 'true'
+            # WebDAV encryption key (change this in production!)
+            WEBDAV_ENCRYPTION_KEY: 'my-secure-webdav-encryption-key!'
+        networks:
+            - overleaf-net
+
+    mongo:
+        restart: always
+        image: mongo:8.0
+        container_name: mongo
+        command: '--replSet overleaf'
+        volumes:
+            - mongo_data:/data/db
+            - ./mongodb-init-replica-set.js:/docker-entrypoint-initdb.d/mongodb-init-replica-set.js
+        environment:
+            MONGO_INITDB_DATABASE: sharelatex
+        extra_hosts:
+            - mongo:127.0.0.1
+        healthcheck:
+            test: echo 'db.stats().ok' | mongosh localhost:27017/test --quiet
+            interval: 10s
+            timeout: 10s
+            retries: 5
+        networks:
+            - overleaf-net
+
+    redis:
+        restart: always
+        image: redis:6.2
+        container_name: redis
+        volumes:
+            - redis_data:/data
+        networks:
+            - overleaf-net
+
+    webdav:
+        restart: always
+        image: bytemark/webdav
+        container_name: webdav
+        environment:
+            AUTH_TYPE: Basic
+            USERNAME: test
+            PASSWORD: test
+        volumes:
+            - webdav_data:/var/lib/dav
+        ports:
+            - 8080:80
+        networks:
+            - overleaf-net
+
+volumes:
+    sharelatex_data:
+    mongo_data:
+    redis_data:
+    webdav_data:
+
+networks:
+    overleaf-net:
+        driver: bridge

@@ -22,6 +22,7 @@ import {
   RequestFailedError,
 } from '@overleaf/fetch-utils'
 import Features from '../../infrastructure/Features.mjs'
+import WebDAVSyncService from '../WebDAV/WebDAVSyncService.mjs'
 
 const { z, zz, validateReq } = Validation
 const ClsiCookieManager = ClsiCookieManagerFactory(
@@ -54,7 +55,7 @@ function _getSplitTestOptions(req, res) {
   try {
     const u = new URL(req.headers.referer || req.url, Settings.siteUrl)
     query = Object.fromEntries(u.searchParams.entries())
-  } catch (e) {}
+  } catch (e) { }
   const editorReq = { ...req, query }
 
   const pdfDownloadDomain = Settings.pdfDownloadDomain
@@ -227,6 +228,15 @@ const _CompileController = {
       ? getOutputFilesArchiveSpecification(projectId, userId, buildId)
       : null
 
+    // Sync compile outputs to WebDAV if enabled (non-blocking)
+    if (status === 'success' && buildId && outputFiles && outputFiles.length > 0) {
+      WebDAVSyncService.promises
+        .syncCompileOutputs(projectId, outputFiles, clsiServerId, buildId)
+        .catch(err => {
+          logger.warn({ err, projectId }, 'WebDAV compile output sync failed')
+        })
+    }
+
     res.json({
       status,
       outputFiles,
@@ -376,7 +386,7 @@ const _CompileController = {
 
     let outputFiles
     try {
-      ;({ outputFiles } = await CompileManager.promises
+      ; ({ outputFiles } = await CompileManager.promises
         // pass userId as null, since templates are an "anonymous" compile
         .compile(projectId, null, {}))
     } catch (err) {
@@ -665,11 +675,11 @@ async function _getPersistenceOptions(
       qs: { compileGroup, compileBackendClass },
       headers: clsiServerId
         ? {
-            Cookie: new Cookie({
-              key: Settings.clsiCookie.key,
-              value: clsiServerId,
-            }).cookieString(),
-          }
+          Cookie: new Cookie({
+            key: Settings.clsiCookie.key,
+            value: clsiServerId,
+          }).cookieString(),
+        }
         : {},
     }
   }
