@@ -24,6 +24,7 @@ import EditorRealTimeController from '../Editor/EditorRealTimeController.mjs'
 import { callbackifyMultiResult, callbackify } from '@overleaf/promise-utils'
 import { iterablePaths } from './IterablePath.mjs'
 import WebDAVSyncService from '../WebDAV/WebDAVSyncService.mjs'
+import GitBackupSyncService from '../GitBackup/GitBackupSyncService.mjs'
 
 const LOCK_NAMESPACE = 'sequentialProjectStructureUpdateLock'
 const VALID_ROOT_DOC_EXTENSIONS = Settings.validRootDocExtensions
@@ -207,6 +208,13 @@ async function updateDocLines(
       logger.warn({ err, projectId, docId }, 'WebDAV sync failed after doc update')
     })
 
+  // Trigger Git backup check if enabled
+  GitBackupSyncService.promises
+    .syncDocument(projectId, docId, path)
+    .catch(err => {
+      logger.warn({ err, projectId, docId }, 'Git backup sync failed after doc update')
+    })
+
   return { rev, modified }
 }
 
@@ -330,6 +338,13 @@ const addDocWithRanges = wrapWithLock({
         .catch(err => {
           logger.warn({ err, projectId, docId: doc._id }, 'WebDAV sync failed')
         })
+
+      // Trigger Git backup check if enabled
+      GitBackupSyncService.promises
+        .syncDocument(projectId, doc._id, docPath)
+        .catch(err => {
+          logger.warn({ err, projectId, docId: doc._id }, 'Git backup sync failed')
+        })
     }
 
     return { doc, folderId: folderId || project.rootFolder[0]._id }
@@ -405,6 +420,13 @@ const addFile = wrapWithLock({
         .syncFile(projectId, fileRef._id, filePath, fileRef.hash)
         .catch(err => {
           logger.warn({ err, projectId, fileId: fileRef._id }, 'WebDAV sync failed')
+        })
+
+      // Trigger Git backup check if enabled
+      GitBackupSyncService.promises
+        .syncFile(projectId, fileRef._id, filePath, fileRef.hash)
+        .catch(err => {
+          logger.warn({ err, projectId, fileId: fileRef._id }, 'Git backup sync failed')
         })
     }
 
@@ -861,6 +883,13 @@ const deleteEntity = wrapWithLock(
       .deleteFromWebDAV(projectId, path.fileSystem)
       .catch(err => {
         logger.warn({ err, projectId, entityId }, 'WebDAV delete failed')
+      })
+
+    // Trigger Git backup check on delete
+    GitBackupSyncService.promises
+      .deleteFromGit(projectId, path.fileSystem)
+      .catch(err => {
+        logger.warn({ err, projectId, entityId }, 'Git backup delete notification failed')
       })
 
     return entityId
@@ -1451,6 +1480,13 @@ const ProjectEntityUpdateHandler = {
         .syncFile(projectId, updatedFileRef._id, path.fileSystem, updatedFileRef.hash)
         .catch(err => {
           logger.warn({ err, projectId, fileId: updatedFileRef._id }, 'WebDAV sync failed after file replace')
+        })
+
+      // Trigger Git backup check if enabled
+      GitBackupSyncService.promises
+        .syncFile(projectId, updatedFileRef._id, path.fileSystem, updatedFileRef.hash)
+        .catch(err => {
+          logger.warn({ err, projectId, fileId: updatedFileRef._id }, 'Git backup sync failed after file replace')
         })
     }
 
