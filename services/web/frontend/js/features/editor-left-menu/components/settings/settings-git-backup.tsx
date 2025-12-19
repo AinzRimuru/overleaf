@@ -6,9 +6,10 @@ import { useProjectContext } from '@/shared/context/project-context'
 import { postJSON, getJSON } from '@/infrastructure/fetch-json'
 import { debugConsole } from '@/utils/debugging'
 
-type WebDAVStatus = {
+type GitBackupStatus = {
     enabled: boolean
-    url?: string
+    repoUrl?: string
+    branch?: string
     basePath?: string
     syncStatus?: {
         lastSyncAt?: string
@@ -19,7 +20,7 @@ type WebDAVStatus = {
 }
 
 type BackupSettings = {
-    webdavEnabled: boolean
+    gitBackupEnabled: boolean
     enabled: boolean
     modificationThreshold: number
     intervalMinutes: number
@@ -28,28 +29,29 @@ type BackupSettings = {
     lastBackupAt: string | null
 }
 
-export default function SettingsWebDAV() {
+export default function SettingsGitBackup() {
     const { t } = useTranslation()
     const { write } = usePermissionsContext()
     const { projectId } = useProjectContext()
 
-    const [status, setStatus] = useState<WebDAVStatus>({ enabled: false })
+    const [status, setStatus] = useState<GitBackupStatus>({ enabled: false })
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [success, setSuccess] = useState<string | null>(null)
 
     // Form fields
-    const [url, setUrl] = useState('')
+    const [repoUrl, setRepoUrl] = useState('')
+    const [branch, setBranch] = useState('main')
     const [username, setUsername] = useState('')
-    const [password, setPassword] = useState('')
-    const [basePath, setBasePath] = useState(`/overleaf/${projectId}`)
+    const [accessToken, setAccessToken] = useState('')
+    const [basePath, setBasePath] = useState('')
     const [showLinkForm, setShowLinkForm] = useState(false)
     const [testing, setTesting] = useState(false)
     const [syncing, setSyncing] = useState(false)
 
     // Backup settings
     const [backupSettings, setBackupSettings] = useState<BackupSettings>({
-        webdavEnabled: false,
+        gitBackupEnabled: false,
         enabled: false,
         modificationThreshold: 6,
         intervalMinutes: 10,
@@ -67,12 +69,12 @@ export default function SettingsWebDAV() {
     const loadStatus = async () => {
         try {
             setLoading(true)
-            const data = await getJSON<WebDAVStatus>(
-                `/project/${projectId}/webdav/status`
+            const data = await getJSON<GitBackupStatus>(
+                `/project/${projectId}/git-backup/status`
             )
             setStatus(data)
         } catch (err) {
-            debugConsole.error('Failed to load WebDAV status', err)
+            debugConsole.error('Failed to load Git backup status', err)
         } finally {
             setLoading(false)
         }
@@ -81,7 +83,7 @@ export default function SettingsWebDAV() {
     const loadBackupSettings = async () => {
         try {
             const data = await getJSON<BackupSettings>(
-                `/project/${projectId}/webdav/backup/settings`
+                `/project/${projectId}/git-backup/backup/settings`
             )
             setBackupSettings(data)
         } catch (err) {
@@ -95,12 +97,12 @@ export default function SettingsWebDAV() {
         setSuccess(null)
 
         try {
-            await postJSON(`/project/${projectId}/webdav/test`, {
-                body: { url, username, password, basePath },
+            await postJSON(`/project/${projectId}/git-backup/test`, {
+                body: { repoUrl, branch, username, accessToken },
             })
-            setSuccess(t('webdav_connection_successful'))
+            setSuccess(t('git_backup_connection_successful'))
         } catch (err: any) {
-            setError(err.message || t('webdav_connection_failed'))
+            setError(err.message || t('git_backup_connection_failed'))
         } finally {
             setTesting(false)
         }
@@ -111,26 +113,26 @@ export default function SettingsWebDAV() {
         setSuccess(null)
 
         try {
-            await postJSON(`/project/${projectId}/webdav/link`, {
-                body: { url, username, password, basePath },
+            await postJSON(`/project/${projectId}/git-backup/link`, {
+                body: { repoUrl, branch, username, accessToken, basePath },
             })
-            setSuccess(t('webdav_linked_successfully'))
+            setSuccess(t('git_backup_linked_successfully'))
             setShowLinkForm(false)
             await loadStatus()
             await loadBackupSettings()
 
             // Clear sensitive data
-            setPassword('')
+            setAccessToken('')
         } catch (err: any) {
-            setError(err.message || t('webdav_link_failed'))
+            setError(err.message || t('git_backup_link_failed'))
         }
     }
 
     const handleUnlink = async (deleteRemote: boolean) => {
         if (!window.confirm(
             deleteRemote
-                ? t('webdav_confirm_unlink_delete')
-                : t('webdav_confirm_unlink_keep')
+                ? t('git_backup_confirm_unlink_delete')
+                : t('git_backup_confirm_unlink_keep')
         )) {
             return
         }
@@ -139,18 +141,18 @@ export default function SettingsWebDAV() {
         setSuccess(null)
 
         try {
-            await postJSON(`/project/${projectId}/webdav/unlink`, {
+            await postJSON(`/project/${projectId}/git-backup/unlink`, {
                 body: { deleteRemote },
             })
             setSuccess(
                 deleteRemote
-                    ? t('webdav_unlinked_deleted')
-                    : t('webdav_unlinked_kept')
+                    ? t('git_backup_unlinked_deleted')
+                    : t('git_backup_unlinked_kept')
             )
             await loadStatus()
             await loadBackupSettings()
         } catch (err: any) {
-            setError(err.message || t('webdav_unlink_failed'))
+            setError(err.message || t('git_backup_unlink_failed'))
         }
     }
 
@@ -160,11 +162,11 @@ export default function SettingsWebDAV() {
         setSuccess(null)
 
         try {
-            await postJSON(`/project/${projectId}/webdav/sync`, { body: {} })
-            setSuccess(t('webdav_sync_started'))
+            await postJSON(`/project/${projectId}/git-backup/sync`, { body: {} })
+            setSuccess(t('git_backup_sync_started'))
             await loadStatus()
         } catch (err: any) {
-            setError(err.message || t('webdav_sync_failed'))
+            setError(err.message || t('git_backup_sync_failed'))
         } finally {
             setSyncing(false)
         }
@@ -176,7 +178,7 @@ export default function SettingsWebDAV() {
         setSuccess(null)
 
         try {
-            await postJSON(`/project/${projectId}/webdav/backup/settings`, {
+            await postJSON(`/project/${projectId}/git-backup/backup/settings`, {
                 body: {
                     enabled: backupSettings.enabled,
                     modificationThreshold: backupSettings.modificationThreshold,
@@ -184,10 +186,10 @@ export default function SettingsWebDAV() {
                     maxBackups: backupSettings.maxBackups,
                 },
             })
-            setSuccess(t('webdav_backup_settings_saved'))
+            setSuccess(t('git_backup_settings_saved'))
             await loadBackupSettings()
         } catch (err: any) {
-            setError(err.message || t('webdav_settings_failed'))
+            setError(err.message || t('git_backup_settings_failed'))
         } finally {
             setSavingBackup(false)
         }
@@ -195,15 +197,15 @@ export default function SettingsWebDAV() {
 
     if (loading) {
         return (
-            <div className="settings-webdav" style={{ textAlign: 'center', padding: '16px' }}>
+            <div className="settings-git-backup" style={{ textAlign: 'center', padding: '16px' }}>
                 <Spinner animation="border" size="sm" />
             </div>
         )
     }
 
     return (
-        <div className="settings-webdav" style={{ padding: '8px 16px' }}>
-            <h4 style={{ marginBottom: '8px' }}>{t('webdav_storage')}</h4>
+        <div className="settings-git-backup" style={{ padding: '8px 16px' }}>
+            <h4 style={{ marginBottom: '8px' }}>{t('git_backup_storage')}</h4>
 
             {error && <Alert variant="danger" style={{ fontSize: '12px', padding: '8px' }}>{error}</Alert>}
             {success && <Alert variant="success" style={{ fontSize: '12px', padding: '8px' }}>{success}</Alert>}
@@ -217,7 +219,7 @@ export default function SettingsWebDAV() {
                         disabled={!write}
                         style={{ width: '100%' }}
                     >
-                        {t('webdav_link_project')}
+                        {t('git_backup_link_project')}
                     </Button>
                 </div>
             )}
@@ -225,14 +227,25 @@ export default function SettingsWebDAV() {
             {!status.enabled && showLinkForm && (
                 <Form>
                     <Form.Group className="mb-2">
-                        <Form.Label style={{ fontSize: '12px' }}>{t('webdav_server_url')}</Form.Label>
+                        <Form.Label style={{ fontSize: '12px' }}>{t('git_backup_repo_url')}</Form.Label>
                         <Form.Control
                             type="url"
                             size="sm"
-                            value={url}
-                            onChange={(e: any) => setUrl(e.target.value)}
-                            placeholder="https://webdav.example.com"
+                            value={repoUrl}
+                            onChange={(e: any) => setRepoUrl(e.target.value)}
+                            placeholder="https://github.com/user/repo.git"
                             required
+                        />
+                    </Form.Group>
+
+                    <Form.Group className="mb-2">
+                        <Form.Label style={{ fontSize: '12px' }}>{t('git_backup_branch')}</Form.Label>
+                        <Form.Control
+                            type="text"
+                            size="sm"
+                            value={branch}
+                            onChange={(e: any) => setBranch(e.target.value)}
+                            placeholder="main"
                         />
                     </Form.Group>
 
@@ -248,23 +261,25 @@ export default function SettingsWebDAV() {
                     </Form.Group>
 
                     <Form.Group className="mb-2">
-                        <Form.Label style={{ fontSize: '12px' }}>{t('password')}</Form.Label>
+                        <Form.Label style={{ fontSize: '12px' }}>{t('git_backup_access_token')}</Form.Label>
                         <Form.Control
                             type="password"
                             size="sm"
-                            value={password}
-                            onChange={(e: any) => setPassword(e.target.value)}
+                            value={accessToken}
+                            onChange={(e: any) => setAccessToken(e.target.value)}
+                            placeholder="ghp_xxxxxxxxxxxx"
                             required
                         />
                     </Form.Group>
 
                     <Form.Group className="mb-2">
-                        <Form.Label style={{ fontSize: '12px' }}>{t('webdav_base_path')}</Form.Label>
+                        <Form.Label style={{ fontSize: '12px' }}>{t('git_backup_base_path')}</Form.Label>
                         <Form.Control
                             type="text"
                             size="sm"
                             value={basePath}
                             onChange={(e: any) => setBasePath(e.target.value)}
+                            placeholder={t('git_backup_base_path_placeholder')}
                         />
                     </Form.Group>
 
@@ -273,7 +288,7 @@ export default function SettingsWebDAV() {
                             variant="secondary"
                             size="sm"
                             onClick={handleTestConnection}
-                            disabled={testing || !url || !username || !password}
+                            disabled={testing || !repoUrl || !username || !accessToken}
                             style={{ width: '100%' }}
                         >
                             {testing ? <Spinner animation="border" size="sm" /> : t('test_connection')}
@@ -282,7 +297,7 @@ export default function SettingsWebDAV() {
                             variant="primary"
                             size="sm"
                             onClick={handleLink}
-                            disabled={!url || !username || !password}
+                            disabled={!repoUrl || !username || !accessToken}
                             style={{ width: '100%' }}
                         >
                             {t('link')}
@@ -302,12 +317,18 @@ export default function SettingsWebDAV() {
             {status.enabled && (
                 <div>
                     <Alert variant="success" style={{ fontSize: '12px', padding: '8px' }}>
-                        <strong>{t('webdav_linked')}</strong>
+                        <strong>{t('git_backup_linked')}</strong>
                         <div style={{ marginTop: '4px' }}>
                             <small>
-                                <strong>{t('url')}:</strong> {status.url}
+                                <strong>{t('git_backup_repo')}:</strong> {status.repoUrl}
                                 <br />
-                                <strong>{t('path')}:</strong> {status.basePath}
+                                <strong>{t('git_backup_branch')}:</strong> {status.branch}
+                                {status.basePath && (
+                                    <>
+                                        <br />
+                                        <strong>{t('path')}:</strong> {status.basePath}
+                                    </>
+                                )}
                             </small>
                         </div>
                     </Alert>
@@ -357,7 +378,7 @@ export default function SettingsWebDAV() {
                             disabled={!write}
                             style={{ width: '100%' }}
                         >
-                            {t('webdav_unlink_keep')}
+                            {t('git_backup_unlink_keep')}
                         </Button>
                         <Button
                             variant="danger"
@@ -366,19 +387,19 @@ export default function SettingsWebDAV() {
                             disabled={!write}
                             style={{ width: '100%' }}
                         >
-                            {t('webdav_unlink_delete')}
+                            {t('git_backup_unlink_delete')}
                         </Button>
                     </div>
 
                     {/* Backup Settings Section */}
                     <div style={{ borderTop: '1px solid #ddd', paddingTop: '12px', marginTop: '8px' }}>
-                        <h5 style={{ fontSize: '14px', marginBottom: '8px' }}>{t('webdav_backup_settings')}</h5>
+                        <h5 style={{ fontSize: '14px', marginBottom: '8px' }}>{t('git_backup_settings')}</h5>
 
                         <Form.Group className="mb-2">
                             <Form.Check
                                 type="switch"
-                                id="backup-enabled"
-                                label={t('webdav_backup_enable')}
+                                id="git-backup-enabled"
+                                label={t('git_backup_enable')}
                                 checked={backupSettings.enabled}
                                 onChange={(e: any) => setBackupSettings({ ...backupSettings, enabled: e.target.checked })}
                                 disabled={!write}
@@ -389,9 +410,9 @@ export default function SettingsWebDAV() {
                             <>
                                 <Form.Group className="mb-2">
                                     <Form.Label style={{ fontSize: '12px' }}>
-                                        {t('webdav_backup_threshold')}
+                                        {t('git_backup_threshold')}
                                         <small className="text-muted" style={{ display: 'block' }}>
-                                            {t('webdav_backup_threshold_help')}
+                                            {t('git_backup_threshold_help')}
                                         </small>
                                     </Form.Label>
                                     <Form.Control
@@ -409,9 +430,9 @@ export default function SettingsWebDAV() {
 
                                 <Form.Group className="mb-2">
                                     <Form.Label style={{ fontSize: '12px' }}>
-                                        {t('webdav_backup_interval')}
+                                        {t('git_backup_interval')}
                                         <small className="text-muted" style={{ display: 'block' }}>
-                                            {t('webdav_backup_interval_help')}
+                                            {t('git_backup_interval_help')}
                                         </small>
                                     </Form.Label>
                                     <Form.Control
@@ -429,9 +450,9 @@ export default function SettingsWebDAV() {
 
                                 <Form.Group className="mb-2">
                                     <Form.Label style={{ fontSize: '12px' }}>
-                                        {t('webdav_backup_max_count')}
+                                        {t('git_backup_max_count')}
                                         <small className="text-muted" style={{ display: 'block' }}>
-                                            {t('webdav_backup_max_count_help')}
+                                            {t('git_backup_max_count_help')}
                                         </small>
                                     </Form.Label>
                                     <Form.Control
@@ -450,7 +471,7 @@ export default function SettingsWebDAV() {
                                 {backupSettings.lastBackupAt && (
                                     <div style={{ fontSize: '12px', marginBottom: '8px' }}>
                                         <small>
-                                            <strong>{t('webdav_backup_last_backup')}:</strong>{' '}
+                                            <strong>{t('git_backup_last_backup')}:</strong>{' '}
                                             {new Date(backupSettings.lastBackupAt).toLocaleString()}
                                         </small>
                                     </div>

@@ -194,6 +194,71 @@ async function updateSyncStatus(projectId, status) {
     ).exec()
 }
 
+/**
+ * Update backup settings
+ */
+async function updateBackupSettings(projectId, settings) {
+    const updateFields = {}
+
+    if (typeof settings.enabled === 'boolean') {
+        updateFields['webdav.backup.enabled'] = settings.enabled
+    }
+    if (typeof settings.modificationThreshold === 'number' && settings.modificationThreshold > 0) {
+        updateFields['webdav.backup.modificationThreshold'] = settings.modificationThreshold
+    }
+    if (typeof settings.intervalMinutes === 'number' && settings.intervalMinutes > 0) {
+        updateFields['webdav.backup.intervalMinutes'] = settings.intervalMinutes
+    }
+    if (typeof settings.maxBackups === 'number' && settings.maxBackups > 0) {
+        updateFields['webdav.backup.maxBackups'] = settings.maxBackups
+    }
+
+    if (Object.keys(updateFields).length === 0) {
+        return { success: false, message: 'No valid settings to update' }
+    }
+
+    await Project.updateOne(
+        { _id: projectId },
+        { $set: updateFields }
+    ).exec()
+
+    logger.info({ projectId, settings: updateFields }, 'WebDAV backup settings updated')
+    return { success: true }
+}
+
+/**
+ * Get backup settings
+ */
+async function getBackupSettings(projectId) {
+    const project = await Project.findById(projectId, {
+        'webdav.enabled': 1,
+        'webdav.backup': 1,
+    }).exec()
+
+    if (!project || !project.webdav) {
+        return {
+            webdavEnabled: false,
+            enabled: false,
+            modificationThreshold: 6,
+            intervalMinutes: 10,
+            maxBackups: 10,
+            modificationCount: 0,
+            lastBackupAt: null,
+        }
+    }
+
+    const backup = project.webdav.backup || {}
+    return {
+        webdavEnabled: project.webdav.enabled || false,
+        enabled: backup.enabled || false,
+        modificationThreshold: backup.modificationThreshold || 6,
+        intervalMinutes: backup.intervalMinutes || 10,
+        maxBackups: backup.maxBackups || 10,
+        modificationCount: backup.modificationCount || 0,
+        lastBackupAt: backup.lastBackupAt || null,
+    }
+}
+
 export default {
     linkProjectToWebDAV: callbackify(linkProjectToWebDAV),
     unlinkProjectFromWebDAV: callbackify(unlinkProjectFromWebDAV),
@@ -202,11 +267,15 @@ export default {
     decryptCredentials,
     getWebDAVClient: callbackify(getWebDAVClient),
     updateSyncStatus: callbackify(updateSyncStatus),
+    updateBackupSettings: callbackify(updateBackupSettings),
+    getBackupSettings: callbackify(getBackupSettings),
     promises: {
         linkProjectToWebDAV,
         unlinkProjectFromWebDAV,
         validateWebDAVConnection,
         getWebDAVClient,
         updateSyncStatus,
+        updateBackupSettings,
+        getBackupSettings,
     },
 }

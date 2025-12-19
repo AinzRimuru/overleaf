@@ -5,6 +5,7 @@ import WebDAVProjectHandler from './WebDAVProjectHandler.mjs'
 import HistoryManager from '../History/HistoryManager.mjs'
 import DocstoreManager from '../Docstore/DocstoreManager.mjs'
 import { promiseMapWithLimit } from '@overleaf/promise-utils'
+import WebDAVBackupService from './WebDAVBackupService.mjs'
 
 /**
  * Service for syncing project files to WebDAV
@@ -51,6 +52,11 @@ async function syncDocument(projectId, docId, docPath) {
         await WebDAVProjectHandler.promises.updateSyncStatus(projectId, {
             isSyncing: false,
             lastSyncAt: new Date(),
+        })
+
+        // Trigger backup check after successful sync
+        WebDAVBackupService.promises.checkAndTriggerBackup(projectId).catch(err => {
+            logger.warn({ err, projectId }, 'WebDAV backup check failed')
         })
     } catch (err) {
         logger.error({ err, projectId, docId }, 'failed to sync document to WebDAV')
@@ -110,6 +116,11 @@ async function syncFile(projectId, fileId, filePath, fileHash) {
         await WebDAVProjectHandler.promises.updateSyncStatus(projectId, {
             isSyncing: false,
             lastSyncAt: new Date(),
+        })
+
+        // Trigger backup check after successful sync
+        WebDAVBackupService.promises.checkAndTriggerBackup(projectId).catch(err => {
+            logger.warn({ err, projectId }, 'WebDAV backup check failed')
         })
     } catch (err) {
         logger.error({ err, projectId, fileId, fileHash }, 'failed to sync file to WebDAV')

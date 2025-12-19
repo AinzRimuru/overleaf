@@ -66,6 +66,7 @@ import SocketDiagnostics from './Features/SocketDiagnostics/SocketDiagnostics.mj
 import ClsiCacheController from './Features/Compile/ClsiCacheController.mjs'
 import AsyncLocalStorage from './infrastructure/AsyncLocalStorage.mjs'
 import WebDAVController from './Features/WebDAV/WebDAVController.mjs'
+import GitBackupController from './Features/GitBackup/GitBackupController.mjs'
 
 const { renderUnsupportedBrowserPage, unsupportedBrowserMiddleware } =
   UnsupportedBrowserMiddleware
@@ -745,6 +746,61 @@ async function initialize(webRouter, privateApiRouter, publicApiRouter) {
     '/project/:Project_id/webdav/test',
     AuthenticationController.requireLogin(),
     WebDAVController.testConnection
+  )
+  webRouter.get(
+    '/project/:Project_id/webdav/backup/settings',
+    AuthenticationController.requireLogin(),
+    AuthorizationMiddleware.ensureUserCanReadProject,
+    WebDAVController.getBackupSettings
+  )
+  webRouter.post(
+    '/project/:Project_id/webdav/backup/settings',
+    AuthenticationController.requireLogin(),
+    AuthorizationMiddleware.ensureUserCanWriteProjectSettings,
+    WebDAVController.updateBackupSettings
+  )
+
+  // Git Backup routes
+  webRouter.post(
+    '/project/:Project_id/git-backup/link',
+    AuthenticationController.requireLogin(),
+    AuthorizationMiddleware.ensureUserCanWriteProjectSettings,
+    GitBackupController.linkProject
+  )
+  webRouter.post(
+    '/project/:Project_id/git-backup/unlink',
+    AuthenticationController.requireLogin(),
+    AuthorizationMiddleware.ensureUserCanWriteProjectSettings,
+    GitBackupController.unlinkProject
+  )
+  webRouter.post(
+    '/project/:Project_id/git-backup/sync',
+    AuthenticationController.requireLogin(),
+    AuthorizationMiddleware.ensureUserCanWriteProjectSettings,
+    GitBackupController.syncProject
+  )
+  webRouter.get(
+    '/project/:Project_id/git-backup/status',
+    AuthenticationController.requireLogin(),
+    AuthorizationMiddleware.ensureUserCanReadProject,
+    GitBackupController.getStatus
+  )
+  webRouter.post(
+    '/project/:Project_id/git-backup/test',
+    AuthenticationController.requireLogin(),
+    GitBackupController.testConnection
+  )
+  webRouter.get(
+    '/project/:Project_id/git-backup/backup/settings',
+    AuthenticationController.requireLogin(),
+    AuthorizationMiddleware.ensureUserCanReadProject,
+    GitBackupController.getBackupSettings
+  )
+  webRouter.post(
+    '/project/:Project_id/git-backup/backup/settings',
+    AuthenticationController.requireLogin(),
+    AuthorizationMiddleware.ensureUserCanWriteProjectSettings,
+    GitBackupController.updateBackupSettings
   )
 
   webRouter.post(

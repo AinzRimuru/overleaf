@@ -102,6 +102,43 @@ export const ProjectSchema = new Schema(
       },
       linkedAt: { type: Date },
       unlinkedAt: { type: Date },
+      backup: {
+        enabled: { type: Boolean, default: false },
+        modificationThreshold: { type: Number, default: 6 },    // 修改计数阈值
+        intervalMinutes: { type: Number, default: 10 },         // 周期时间（分钟）
+        maxBackups: { type: Number, default: 10 },              // 备份数量上限
+        modificationCount: { type: Number, default: 0 },        // 当前修改计数
+        nextCheckTime: { type: Date },                          // 下次计数时间
+        lastBackupAt: { type: Date },                           // 上次备份时间
+      },
+    },
+    gitBackup: {
+      enabled: { type: Boolean, default: false },
+      // Git repository configuration
+      repoUrl: { type: String },                      // Git repository URL
+      branch: { type: String, default: 'main' },      // Branch name
+      username: { type: String },                     // Username
+      accessToken: { type: String },                  // Encrypted access token (PAT)
+      basePath: { type: String, default: '' },        // Path within repository
+      commitMessage: { type: String, default: 'Auto backup from Overleaf' },
+      // Sync status
+      syncStatus: {
+        lastSyncAt: { type: Date },
+        lastSyncError: { type: String },
+        isSyncing: { type: Boolean, default: false },
+      },
+      linkedAt: { type: Date },
+      unlinkedAt: { type: Date },
+      // Backup settings (same as WebDAV)
+      backup: {
+        enabled: { type: Boolean, default: false },
+        modificationThreshold: { type: Number, default: 6 },    // Modification count threshold
+        intervalMinutes: { type: Number, default: 10 },         // Check interval (minutes)
+        maxBackups: { type: Number, default: 10 },              // Maximum backup count
+        modificationCount: { type: Number, default: 0 },        // Current modification count
+        nextCheckTime: { type: Date },                          // Next check time
+        lastBackupAt: { type: Date },                           // Last backup time
+      },
     },
     collabratecUsers: [
       {

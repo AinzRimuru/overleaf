@@ -21,6 +21,7 @@ import { ElementType } from 'react'
 import OLForm from '@/shared/components/ol/ol-form'
 import SettingsNewEditor from './settings/settings-new-editor'
 import SettingsWebDAV from './settings/settings-webdav'
+import SettingsGitBackup from './settings/settings-git-backup'
 
 const moduleSettings: Array<{
   import: { default: ElementType }
@@ -61,6 +62,7 @@ export default function SettingsMenu() {
         <SettingsNewEditor />
         <hr />
         <SettingsWebDAV />
+        <SettingsGitBackup />
       </OLForm>
     </>
   )
