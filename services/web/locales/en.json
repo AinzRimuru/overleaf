@@ -3010,8 +3010,6 @@
   "git_backup_threshold_help": "Number of modifications before triggering a backup",
   "git_backup_interval": "Check Interval (minutes)",
   "git_backup_interval_help": "Minimum time between modification checks",
-  "git_backup_max_count": "Maximum Backups",
-  "git_backup_max_count_help": "Maximum number of backup tags to keep",
   "git_backup_last_backup": "Last Backup",
   "git_backup_settings_saved": "Backup settings saved",
   "git_backup_settings_failed": "Failed to save backup settings"

@@ -24,7 +24,6 @@ type BackupSettings = {
     enabled: boolean
     modificationThreshold: number
     intervalMinutes: number
-    maxBackups: number
     modificationCount: number
     lastBackupAt: string | null
 }
@@ -55,7 +54,6 @@ export default function SettingsGitBackup() {
         enabled: false,
         modificationThreshold: 6,
         intervalMinutes: 10,
-        maxBackups: 10,
         modificationCount: 0,
         lastBackupAt: null,
     })
@@ -183,7 +181,6 @@ export default function SettingsGitBackup() {
                     enabled: backupSettings.enabled,
                     modificationThreshold: backupSettings.modificationThreshold,
                     intervalMinutes: backupSettings.intervalMinutes,
-                    maxBackups: backupSettings.maxBackups,
                 },
             })
             setSuccess(t('git_backup_settings_saved'))
@@ -448,25 +445,6 @@ export default function SettingsGitBackup() {
                                     />
                                 </Form.Group>
 
-                                <Form.Group className="mb-2">
-                                    <Form.Label style={{ fontSize: '12px' }}>
-                                        {t('git_backup_max_count')}
-                                        <small className="text-muted" style={{ display: 'block' }}>
-                                            {t('git_backup_max_count_help')}
-                                        </small>
-                                    </Form.Label>
-                                    <Form.Control
-                                        type="number"
-                                        size="sm"
-                                        min={1}
-                                        value={backupSettings.maxBackups}
-                                        onChange={(e: any) => setBackupSettings({
-                                            ...backupSettings,
-                                            maxBackups: parseInt(e.target.value) || 10
-                                        })}
-                                        disabled={!write}
-                                    />
-                                </Form.Group>
 
                                 {backupSettings.lastBackupAt && (
                                     <div style={{ fontSize: '12px', marginBottom: '8px' }}>

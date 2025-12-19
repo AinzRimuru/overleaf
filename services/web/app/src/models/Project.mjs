@@ -134,7 +134,6 @@ export const ProjectSchema = new Schema(
         enabled: { type: Boolean, default: false },
         modificationThreshold: { type: Number, default: 6 },    // Modification count threshold
         intervalMinutes: { type: Number, default: 10 },         // Check interval (minutes)
-        maxBackups: { type: Number, default: 10 },              // Maximum backup count
         modificationCount: { type: Number, default: 0 },        // Current modification count
         nextCheckTime: { type: Date },                          // Next check time
         lastBackupAt: { type: Date },                           // Last backup time

@@ -157,14 +157,13 @@ async function getBackupSettings(req, res, next) {
  */
 async function updateBackupSettings(req, res, next) {
     const projectId = req.params.Project_id
-    const { enabled, modificationThreshold, intervalMinutes, maxBackups } = req.body
+    const { enabled, modificationThreshold, intervalMinutes } = req.body
 
     try {
         const result = await GitBackupProjectHandler.promises.updateBackupSettings(projectId, {
             enabled,
             modificationThreshold,
             intervalMinutes,
-            maxBackups,
         })
         res.json(result)
     } catch (err) {

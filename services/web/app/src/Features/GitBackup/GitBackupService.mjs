@@ -9,12 +9,11 @@ import GitBackupProjectHandler from './GitBackupProjectHandler.mjs'
 /**
  * Service for Git backup functionality
  * 
- * Backup logic (same as WebDAV):
+ * Backup logic:
  * 1. When a file modification triggers Git sync, checkAndTriggerBackup is called
  * 2. If current time < nextCheckTime, skip (don't count this modification)
  * 3. If current time >= nextCheckTime, increment modificationCount and update nextCheckTime
  * 4. If modificationCount >= modificationThreshold, create a backup and reset counter
- * 5. After creating backup, cleanup old backups if exceeding maxBackups
  */
 
 /**
@@ -72,9 +71,6 @@ async function checkAndTriggerBackup(projectId) {
 
             // Create the backup
             const backupResult = await createBackup(projectId)
-
-            // Cleanup old backups
-            await cleanupOldBackups(projectId)
 
             return { triggered: true, backupResult }
         } else {
@@ -324,79 +320,14 @@ async function listBackups(projectId) {
     }
 }
 
-/**
- * Cleanup old backups exceeding the maximum count
- */
-async function cleanupOldBackups(projectId) {
-    try {
-        const project = await Project.findById(projectId, {
-            'gitBackup.backup.maxBackups': 1,
-        }).exec()
-
-        const maxBackups = project?.gitBackup?.backup?.maxBackups || 10
-        const backups = await listBackups(projectId)
-
-        if (backups.length <= maxBackups) {
-            return { deleted: 0 }
-        }
-
-        const gitConfig = await GitBackupProjectHandler.promises.getGitClient(projectId)
-        if (!gitConfig) {
-            return { deleted: 0 }
-        }
-
-        const simpleGit = (await import('simple-git')).default
-
-        // Create temp dir for git operations
-        const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'overleaf-git-cleanup-'))
-
-        try {
-            // Clone with minimal depth
-            const git = simpleGit()
-            await git.clone(gitConfig.authenticatedUrl, tempDir, ['--branch', gitConfig.branch, '--depth', '1'])
-
-            const repoGit = simpleGit(tempDir)
-
-            // Delete oldest backups (they're sorted newest first)
-            const backupsToDelete = backups.slice(maxBackups)
-            let deleted = 0
-
-            for (const backup of backupsToDelete) {
-                try {
-                    // Delete remote tag
-                    await repoGit.push(['origin', `:refs/tags/${backup.name}`])
-                    deleted++
-                    logger.debug({ projectId, tagName: backup.name }, 'Git backup: deleted old backup tag')
-                } catch (err) {
-                    logger.warn({ err, projectId, tagName: backup.name }, 'Git backup: failed to delete old backup tag')
-                }
-            }
-
-            logger.info({ projectId, deleted, total: backups.length }, 'Git backup: cleaned up old backups')
-            return { deleted }
-        } finally {
-            // Cleanup temp directory
-            try {
-                await fs.rm(tempDir, { recursive: true, force: true })
-            } catch (cleanupErr) {
-                logger.warn({ cleanupErr, tempDir }, 'Git backup: failed to cleanup temp directory')
-            }
-        }
-    } catch (err) {
-        logger.error({ err, projectId }, 'Git backup: failed to cleanup old backups')
-        return { deleted: 0, error: err.message }
-    }
-}
 
 export default {
     checkAndTriggerBackup: callbackify(checkAndTriggerBackup),
     createBackup: callbackify(createBackup),
     listBackups: callbackify(listBackups),
-    cleanupOldBackups: callbackify(cleanupOldBackups),
     promises: {
         checkAndTriggerBackup,
         createBackup,
         listBackups,
-        cleanupOldBackups,
     },
 }

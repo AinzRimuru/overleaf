@@ -261,9 +261,6 @@ async function updateBackupSettings(projectId, settings) {
     if (typeof settings.intervalMinutes === 'number' && settings.intervalMinutes > 0) {
         updateFields['gitBackup.backup.intervalMinutes'] = settings.intervalMinutes
     }
-    if (typeof settings.maxBackups === 'number' && settings.maxBackups > 0) {
-        updateFields['gitBackup.backup.maxBackups'] = settings.maxBackups
-    }
 
     if (Object.keys(updateFields).length === 0) {
         return { success: false, message: 'No valid settings to update' }
@@ -293,7 +290,6 @@ async function getBackupSettings(projectId) {
             enabled: false,
             modificationThreshold: 6,
             intervalMinutes: 10,
-            maxBackups: 10,
             modificationCount: 0,
             lastBackupAt: null,
         }
@@ -305,7 +301,6 @@ async function getBackupSettings(projectId) {
         enabled: backup.enabled || false,
         modificationThreshold: backup.modificationThreshold || 6,
         intervalMinutes: backup.intervalMinutes || 10,
-        maxBackups: backup.maxBackups || 10,
         modificationCount: backup.modificationCount || 0,
         lastBackupAt: backup.lastBackupAt || null,
     }
