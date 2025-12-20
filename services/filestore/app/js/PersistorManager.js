@@ -3,8 +3,8 @@ import ObjectPersistor from '@overleaf/object-persistor'
 
 const persistorSettings = settings.filestore
 persistorSettings.paths = settings.path
-const ProjectConfigProvider = require('./ProjectConfigProvider.js')
-const { SyncPersistor } = require('@overleaf/object-persistor')
+import ProjectConfigProvider from './ProjectConfigProvider.js'
+const { SyncPersistor } = ObjectPersistor
 
 let persistor = ObjectPersistor(persistorSettings)
 

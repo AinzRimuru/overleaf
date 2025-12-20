@@ -1,6 +1,6 @@
-const { MongoClient, ObjectId } = require('mongodb')
-const Settings = require('@overleaf/settings')
-const Logger = require('@overleaf/logger')
+import { MongoClient, ObjectId } from 'mongodb'
+import Settings from '@overleaf/settings'
+import Logger from '@overleaf/logger'
 
 class ProjectConfigProvider {
     constructor() {
@@ -44,4 +44,4 @@ class ProjectConfigProvider {
     }
 }
 
-module.exports = new ProjectConfigProvider()
+export default new ProjectConfigProvider()
