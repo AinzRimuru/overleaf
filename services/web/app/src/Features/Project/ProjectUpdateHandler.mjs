@@ -3,6 +3,7 @@ import { callbackify } from 'node:util'
 import OError from '@overleaf/o-error'
 import pkg from '@overleaf/object-persistor'
 const { WebDAVPersistor } = pkg
+import ProjectWebDAVAutoSync from './ProjectWebDAVAutoSync.mjs'
 
 const ProjectUpdateHandler = {
   async markAsUpdated(projectId, lastUpdatedAt, lastUpdatedBy) {
@@ -20,6 +21,11 @@ const ProjectUpdateHandler = {
       lastUpdatedBy,
     }
     await Project.updateOne(conditions, update, {}).exec()
+
+    // Trigger automatic WebDAV sync check (runs in background)
+    ProjectWebDAVAutoSync.markPendingSync(projectId, false).catch(err => {
+      // Ignore errors - this is a best-effort background operation
+    })
   },
 
   async markAsOpened(projectId) {

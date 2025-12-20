@@ -23,6 +23,7 @@ import FileWriter from '../../infrastructure/FileWriter.mjs'
 import EditorRealTimeController from '../Editor/EditorRealTimeController.mjs'
 import { callbackifyMultiResult, callbackify } from '@overleaf/promise-utils'
 import { iterablePaths } from './IterablePath.mjs'
+import ProjectWebDAVAutoSync from './ProjectWebDAVAutoSync.mjs'
 
 const LOCK_NAMESPACE = 'sequentialProjectStructureUpdateLock'
 const VALID_ROOT_DOC_EXTENSIONS = Settings.validRootDocExtensions
@@ -170,7 +171,7 @@ async function updateDocLines(
   logger.debug({ projectId, docId }, 'telling docstore manager to update doc')
   let modified, rev
   try {
-    ;({ modified, rev } = await DocstoreManager.promises.updateDoc(
+    ; ({ modified, rev } = await DocstoreManager.promises.updateDoc(
       projectId,
       docId,
       lines,
@@ -378,6 +379,12 @@ const addFile = wrapWithLock({
       { newFiles, newProject: project },
       source
     )
+
+    // Trigger immediate WebDAV sync for binary file changes (runs in background)
+    ProjectWebDAVAutoSync.markPendingSync(projectId, true).catch(() => {
+      // Ignore errors - this is a best-effort background operation
+    })
+
     return { fileRef, folderId, createdBlob }
   },
 })
@@ -389,7 +396,7 @@ const upsertDoc = wrapWithLock(
     }
     let element, folderPath
     try {
-      ;({ element, path: folderPath } =
+      ; ({ element, path: folderPath } =
         await ProjectLocator.promises.findElement({
           project_id: projectId,
           element_id: folderId,
@@ -572,7 +579,7 @@ const upsertFile = wrapWithLock({
   }) {
     let element
     try {
-      ;({ element } = await ProjectLocator.promises.findElement({
+      ; ({ element } = await ProjectLocator.promises.findElement({
         project_id: projectId,
         element_id: folderId,
         type: 'folder',
@@ -593,7 +600,7 @@ const upsertFile = wrapWithLock({
     if (existingDoc) {
       let path
       try {
-        ;({ path } = await ProjectLocator.promises.findElement({
+        ; ({ path } = await ProjectLocator.promises.findElement({
           project_id: projectId,
           element_id: existingDoc._id,
           type: 'doc',
@@ -1267,7 +1274,7 @@ const ProjectEntityUpdateHandler = {
   async _addDocAndSendToTpds(projectId, folderId, doc, userId) {
     let result, project
     try {
-      ;({ result, project } =
+      ; ({ result, project } =
         await ProjectEntityMongoUpdateHandler.promises.addDoc(
           projectId,
           folderId,
@@ -1320,7 +1327,7 @@ const ProjectEntityUpdateHandler = {
   async _addFileAndSendToTpds(projectId, folderId, fileRef, userId) {
     let result, project
     try {
-      ;({ result, project } =
+      ; ({ result, project } =
         await ProjectEntityMongoUpdateHandler.promises.addFile(
           projectId,
           folderId,
@@ -1407,6 +1414,11 @@ const ProjectEntityUpdateHandler = {
       { oldFiles, newFiles, newProject },
       source
     )
+
+    // Trigger immediate WebDAV sync for binary file replacement (runs in background)
+    ProjectWebDAVAutoSync.markPendingSync(projectId, true).catch(() => {
+      // Ignore errors - this is a best-effort background operation
+    })
 
     return updatedFileRef
   },

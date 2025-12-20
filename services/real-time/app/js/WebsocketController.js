@@ -177,7 +177,9 @@ module.exports = WebsocketController = {
     RoomManager.leaveProjectAndDocs(client)
     setTimeout(function () {
       const remainingClients = io.sockets.clients(projectId)
-      if (remainingClients.length === 0) {
+      const isLastClient = remainingClients.length === 0
+
+      if (isLastClient) {
         // Flush project in the background
         DocumentUpdaterManager.flushProjectToMongoAndDelete(
           projectId,
@@ -190,6 +192,17 @@ module.exports = WebsocketController = {
             }
           }
         )
+
+        // Notify web service to trigger WebDAV sync if enabled
+        // This runs in the background and doesn't block the disconnect flow
+        WebApiManager.leaveProject(projectId, true, function (err) {
+          if (err) {
+            logger.warn(
+              { err, projectId },
+              'error notifying web service of project close for WebDAV sync'
+            )
+          }
+        })
       }
       callback()
     }, WebsocketController.FLUSH_IF_EMPTY_DELAY)
@@ -358,7 +371,7 @@ module.exports = WebsocketController = {
                 }
               }
 
-              AuthorizationManager.addAccessToDoc(client, docId, () => {})
+              AuthorizationManager.addAccessToDoc(client, docId, () => { })
               logger.debug(
                 {
                   userId,
