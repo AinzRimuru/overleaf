@@ -1,5 +1,5 @@
 import { Project } from '../../models/Project.mjs'
-import DocstoreManager from '../Docstore/DocstoreManager.js'
+import DocstoreManager from '../Docstore/DocstoreManager.mjs'
 import FileStoreHandler from '../FileStore/FileStoreHandler.mjs'
 import ProjectEntityHandler from './ProjectEntityHandler.mjs'
 import ProjectGetter from './ProjectGetter.mjs'
