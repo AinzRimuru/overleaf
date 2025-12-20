@@ -11,26 +11,42 @@ module.exports = class SyncPersistor extends AbstractPersistor {
         this.webdavPersistors = new Map() // Cache persistors by projectId
     }
 
-    async getSyncPersistor(location) {
-        // location is effectively projectId in overleaf filestore context
-        if (this.webdavPersistors.has(location)) {
-            return this.webdavPersistors.get(location)
+    async getSyncPersistor(location, name) {
+        let projectId = location
+
+        // In filestore, location is the bucket name (e.g. 'filestore').
+        // The projectId is part of the key (name), e.g. 'projectId/fileId'.
+        const isObjectId = key => /^[0-9a-f]{24}$/i.test(key)
+
+        if (!isObjectId(location) && name) {
+            const parts = name.split('/')
+            if (parts.length > 0 && isObjectId(parts[0])) {
+                projectId = parts[0]
+            }
+        }
+
+        if (!isObjectId(projectId)) {
+            // If we can't determine the project ID, we can't sync.
+            return null
+        }
+
+        if (this.webdavPersistors.has(projectId)) {
+            return this.webdavPersistors.get(projectId)
         }
 
         try {
-            Logger.info({ location }, 'checking webdav config for location')
-            const config = await this.configProvider.getWebDAVConfig(location)
-            Logger.info({ location, config }, 'got webdav config')
+            Logger.info({ location, projectId, name }, 'checking webdav config for project')
+            const config = await this.configProvider.getWebDAVConfig(projectId)
+            Logger.info({ location, projectId, config }, 'got webdav config')
             if (config && config.url && config.enabled) {
-                // Determine WebDAVPersistor class (lazy require to avoid circular dependency issues if any, though declared at top)
                 const WebDAVPersistor = require('./WebDAVPersistor')
                 const persistor = new WebDAVPersistor(config)
-                this.webdavPersistors.set(location, persistor)
-                Logger.info({ location }, 'initialized WebDAV persistor')
+                this.webdavPersistors.set(projectId, persistor)
+                Logger.info({ projectId }, 'initialized WebDAV persistor')
                 return persistor
             }
         } catch (err) {
-            Logger.warn({ err, location }, 'failed to get project webdav config')
+            Logger.warn({ err, location, projectId }, 'failed to get project webdav config')
         }
         return null
     }
@@ -83,7 +99,7 @@ module.exports = class SyncPersistor extends AbstractPersistor {
     async deleteObject(location, name) {
         await this.primary.deleteObject(location, name)
         try {
-            const sync = await this.getSyncPersistor(location)
+            const sync = await this.getSyncPersistor(location, name)
             if (sync) {
                 await sync.deleteObject(location, name)
             }
@@ -95,7 +111,7 @@ module.exports = class SyncPersistor extends AbstractPersistor {
     async deleteDirectory(location, name, continuationToken) {
         await this.primary.deleteDirectory(location, name, continuationToken)
         try {
-            const sync = await this.getSyncPersistor(location)
+            const sync = await this.getSyncPersistor(location, name)
             if (sync) {
                 await sync.deleteDirectory(location, name, continuationToken)
             }
@@ -131,7 +147,7 @@ module.exports = class SyncPersistor extends AbstractPersistor {
 
     async syncFile(location, name) {
         Logger.info({ location, name }, 'syncFile called')
-        const sync = await this.getSyncPersistor(location)
+        const sync = await this.getSyncPersistor(location, name)
         if (!sync) return
 
         let primaryMeta, syncMeta
@@ -186,7 +202,7 @@ module.exports = class SyncPersistor extends AbstractPersistor {
 
     async _syncToRemote(location, name) {
         Logger.info({ location, name }, '_syncToRemote called')
-        const sync = await this.getSyncPersistor(location)
+        const sync = await this.getSyncPersistor(location, name)
         if (!sync) return
 
         try {
@@ -205,7 +221,7 @@ module.exports = class SyncPersistor extends AbstractPersistor {
 
     async _syncToLocal(location, name) {
         Logger.info({ location, name }, '_syncToLocal called')
-        const sync = await this.getSyncPersistor(location)
+        const sync = await this.getSyncPersistor(location, name)
         if (!sync) return
 
         try {
