@@ -48,6 +48,7 @@ import UserUpdater from '../User/UserUpdater.mjs'
 import Modules from '../../infrastructure/Modules.mjs'
 import { z, zz, validateReq } from '../../infrastructure/Validation.mjs'
 import UserGetter from '../User/UserGetter.mjs'
+import ProjectWebDAVSync from './ProjectWebDAVSync.mjs'
 import { isStandaloneAiAddOnPlanCode } from '../Subscription/AiHelper.mjs'
 import SubscriptionController from '../Subscription/SubscriptionController.mjs'
 import { formatCurrency } from '../../util/currency.js'
@@ -395,6 +396,11 @@ const _ProjectController = {
       req.ip
     )
 
+    // Trigger initial full sync in the background
+    ProjectWebDAVSync.syncAllProjectFiles(projectId).catch(err => {
+      logger.warn({ err, projectId }, 'Background WebDAV sync failed')
+    })
+
     res.sendStatus(200)
   },
 
@@ -412,6 +418,27 @@ const _ProjectController = {
     )
 
     res.sendStatus(200)
+  },
+
+  async syncWebDAV(req, res, next) {
+    const projectId = req.params.Project_id
+    const userId = SessionManager.getLoggedInUserId(req.session)
+
+    try {
+      await ProjectWebDAVSync.syncAllProjectFiles(projectId)
+
+      ProjectAuditLogHandler.addEntryIfManagedInBackground(
+        projectId,
+        'webdav-synced',
+        userId,
+        req.ip
+      )
+
+      res.sendStatus(200)
+    } catch (err) {
+      logger.error({ err, projectId }, 'WebDAV sync failed')
+      return res.status(500).json({ message: 'Sync failed' })
+    }
   },
 
   async userProjectsJson(req, res) {

@@ -84,29 +84,20 @@ module.exports = class SyncPersistor extends AbstractPersistor {
 
 
     async sendFile(location, target, source) {
-        console.error(` [SyncPersistor] sendFile called location=${location} target=${target}`)
-        Logger.info({ location, target, source }, 'sendFile called')
+        // Note: Automatic sync to WebDAV is disabled here.
+        // User-friendly file syncing is handled by ProjectWebDAVSync service.
         await this.primary.sendFile(location, target, source)
-        this._syncToRemote(location, target).catch(err => {
-            Logger.warn({ err, location, target }, 'background sync to remote failed')
-        })
     }
 
     async sendStream(location, target, sourceStream, opts = {}) {
-        console.error(` [SyncPersistor] sendStream called location=${location} target=${target}`)
-        Logger.info({ location, target, opts }, 'sendStream called')
+        // Note: Automatic sync to WebDAV is disabled here.
+        // User-friendly file syncing is handled by ProjectWebDAVSync service.
         await this.primary.sendStream(location, target, sourceStream, opts)
-        this._syncToRemote(location, target).catch(err => {
-            Logger.warn({ err, location, target }, 'background sync to remote failed')
-        })
     }
 
     async getObjectStream(location, name, opts = {}) {
-        try {
-            await this.syncFile(location, name)
-        } catch (err) {
-            Logger.warn({ err, location, name }, 'sync on read failed')
-        }
+        // Note: Automatic sync is disabled here.
+        // User-friendly file syncing is handled by ProjectWebDAVSync service.
         return this.primary.getObjectStream(location, name, opts)
     }
 
@@ -137,7 +128,8 @@ module.exports = class SyncPersistor extends AbstractPersistor {
         try {
             const sync = await this.getSyncPersistor(location, name)
             if (sync) {
-                await sync.deleteObject(location, name)
+                const remotePath = this._getSimplifiedRemotePath(location, name)
+                await sync.deleteObject('sync', remotePath)
             }
         } catch (err) {
             Logger.warn({ err, location, name }, 'background delete from sync failed')
@@ -242,9 +234,13 @@ module.exports = class SyncPersistor extends AbstractPersistor {
         if (!sync) return
 
         try {
+            const remotePath = this._getSimplifiedRemotePath(location, name)
+            Logger.info({ location, name, remotePath }, '_syncToRemote using simplified path')
+
             const stream = await this.primary.getObjectStream(location, name)
-            await sync.sendStream(location, name, stream)
-            Logger.info({ location, name }, '_syncToRemote success')
+            // Use 'sync' as a simple bucket name, and the remotePath as the key
+            await sync.sendStream('sync', remotePath, stream)
+            Logger.info({ location, name, remotePath }, '_syncToRemote success')
         } catch (err) {
             throw PersistorHelper.wrapError(
                 err,
@@ -253,6 +249,58 @@ module.exports = class SyncPersistor extends AbstractPersistor {
                 WriteError
             )
         }
+    }
+
+    // Helper method to extract projectId from location/name
+    _extractProjectId(location, name) {
+        const isObjectId = key => /^[0-9a-f]{24}$/i.test(key)
+
+        if (isObjectId(location)) {
+            return location
+        }
+
+        if (name) {
+            const parts = name.split('/')
+
+            // Check if first part is an ObjectId (filestore format: projectId/fileId)
+            if (parts.length > 0 && isObjectId(parts[0])) {
+                return parts[0]
+            }
+            // Check for history-v1 format: abc/def/ghijklmnopqrstuvwx/...
+            else if (parts.length >= 3) {
+                const reversedPrefix = parts[0] + parts[1] + parts[2]
+                const potentialProjectId = reversedPrefix.split('').reverse().join('')
+                if (isObjectId(potentialProjectId)) {
+                    return potentialProjectId
+                }
+            }
+        }
+        return null
+    }
+
+    // Helper method to build a simplified remote path for WebDAV
+    _getSimplifiedRemotePath(location, name) {
+        const projectId = this._extractProjectId(location, name)
+        if (!projectId) {
+            return name
+        }
+
+        // Determine the type of storage based on location
+        let storageType = 'files'
+        if (location.includes('history') || location.includes('chunks')) {
+            storageType = 'history'
+        } else if (location.includes('blobs')) {
+            storageType = 'blobs'
+        }
+
+        // Extract just the filename part (last component after the projectId path)
+        const parts = name.split('/')
+        // For history-v1 format: f87/37e/8357fadce1f4886496/chunkId
+        // We want to use just the chunkId as the filename
+        const filename = parts.length > 3 ? parts.slice(3).join('/') : parts[parts.length - 1]
+
+        // Build simplified path: storageType/projectId/filename
+        return `${storageType}/${projectId}/${filename}`
     }
 
     async _syncToLocal(location, name) {

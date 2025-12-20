@@ -711,6 +711,13 @@ async function initialize(webRouter, privateApiRouter, publicApiRouter) {
   )
 
   webRouter.post(
+    '/project/:Project_id/webdav/sync',
+    AuthenticationController.requireLogin(),
+    AuthorizationMiddleware.ensureUserCanAdminProject,
+    ProjectController.syncWebDAV
+  )
+
+  webRouter.post(
     '/Project/:Project_id/restore',
     AuthenticationController.requireLogin(),
     AuthorizationMiddleware.ensureUserCanAdminProject,
@@ -765,8 +772,8 @@ async function initialize(webRouter, privateApiRouter, publicApiRouter) {
     AuthorizationMiddleware.ensureUserCanReadProject,
     Settings.allowAnonymousReadAndWriteSharing
       ? (req, res, next) => {
-          next()
-        }
+        next()
+      }
       : AuthenticationController.requireLogin(),
     MetaController.getMetadata
   )
@@ -775,8 +782,8 @@ async function initialize(webRouter, privateApiRouter, publicApiRouter) {
     AuthorizationMiddleware.ensureUserCanReadProject,
     Settings.allowAnonymousReadAndWriteSharing
       ? (req, res, next) => {
-          next()
-        }
+        next()
+      }
       : AuthenticationController.requireLogin(),
     MetaController.broadcastMetadataForDoc
   )
@@ -1163,12 +1170,12 @@ async function initialize(webRouter, privateApiRouter, publicApiRouter) {
         // Force every compile to a new server and do not leave cruft behind.
         CompileManager.promises
           .deleteAuxFiles(projectId, testUserId, clsiServerId)
-          .catch(() => {})
+          .catch(() => { })
       })
       let handler = setTimeout(function () {
         CompileManager.promises
           .stopCompile(projectId, testUserId)
-          .catch(() => {})
+          .catch(() => { })
         sendRes(500, 'Compiler timed out')
         handler = null
       }, 10000)

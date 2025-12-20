@@ -101,6 +101,15 @@ export default function WebDAVSettingsModal({
         }
     }, [projectId, runAsync, onClose, onSaved])
 
+    const handleSync = useCallback(async () => {
+        try {
+            await runAsync(postJSON(`/project/${projectId}/webdav/sync`, {}))
+            onSaved?.()
+        } catch {
+            // Error handled by useAsync
+        }
+    }, [projectId, runAsync, onSaved])
+
     return (
         <Modal show={show} onHide={onClose}>
             <OLModalHeader closeButton>
@@ -168,26 +177,37 @@ export default function WebDAVSettingsModal({
 
             <OLModalFooter>
                 {currentConfig?.url && (
-                    <OLButton
-                        variant="danger"
-                        onClick={handleUnlink}
-                        disabled={isLoading}
-                        className="me-auto"
-                    >
-                        {t('unlink')}
-                    </OLButton>
+                    <>
+                        <OLButton
+                            variant="danger"
+                            onClick={handleUnlink}
+                            disabled={isLoading}
+                        >
+                            {t('unlink')}
+                        </OLButton>
+                        <OLButton
+                            variant="info"
+                            onClick={handleSync}
+                            disabled={isLoading}
+                            className="ms-2"
+                        >
+                            {t('sync_now')}
+                        </OLButton>
+                    </>
                 )}
-                <OLButton variant="secondary" onClick={onClose} disabled={isLoading}>
-                    {t('cancel')}
-                </OLButton>
-                <OLButton
-                    variant="primary"
-                    onClick={handleSubmit}
-                    disabled={isLoading || !url.trim()}
-                    isLoading={isLoading}
-                >
-                    {t('save')}
-                </OLButton>
+                <div className="ms-auto d-flex gap-2">
+                    <OLButton variant="secondary" onClick={onClose} disabled={isLoading}>
+                        {t('cancel')}
+                    </OLButton>
+                    <OLButton
+                        variant="primary"
+                        onClick={handleSubmit}
+                        disabled={isLoading || !url.trim()}
+                        isLoading={isLoading}
+                    >
+                        {t('save')}
+                    </OLButton>
+                </div>
             </OLModalFooter>
         </Modal>
     )
