@@ -1,7 +1,8 @@
 import { Project } from '../../models/Project.mjs'
 import { callbackify } from 'node:util'
 import OError from '@overleaf/o-error'
-import { WebDAVPersistor } from '@overleaf/object-persistor'
+import pkg from '@overleaf/object-persistor'
+const { WebDAVPersistor } = pkg
 
 const ProjectUpdateHandler = {
   async markAsUpdated(projectId, lastUpdatedAt, lastUpdatedBy) {
