@@ -56,6 +56,8 @@ module.exports = class SyncPersistor extends AbstractPersistor {
     }
 
     async sendFile(location, target, source) {
+        console.error(` [SyncPersistor] sendFile called location=${location} target=${target}`)
+        Logger.info({ location, target, source }, 'sendFile called')
         await this.primary.sendFile(location, target, source)
         this._syncToRemote(location, target).catch(err => {
             Logger.warn({ err, location, target }, 'background sync to remote failed')
@@ -63,6 +65,8 @@ module.exports = class SyncPersistor extends AbstractPersistor {
     }
 
     async sendStream(location, target, sourceStream, opts = {}) {
+        console.error(` [SyncPersistor] sendStream called location=${location} target=${target}`)
+        Logger.info({ location, target, opts }, 'sendStream called')
         await this.primary.sendStream(location, target, sourceStream, opts)
         this._syncToRemote(location, target).catch(err => {
             Logger.warn({ err, location, target }, 'background sync to remote failed')
