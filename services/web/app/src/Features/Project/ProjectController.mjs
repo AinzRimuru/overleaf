@@ -1490,6 +1490,7 @@ const ProjectController = {
   trashProject: expressify(_ProjectController.trashProject),
   unarchiveProject: expressify(_ProjectController.unarchiveProject),
   unlinkWebDAV: expressify(_ProjectController.unlinkWebDAV),
+  syncWebDAV: expressify(_ProjectController.syncWebDAV),
   untrashProject: expressify(_ProjectController.untrashProject),
   updateProjectAdminSettings: expressify(
     _ProjectController.updateProjectAdminSettings
