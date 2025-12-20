@@ -599,6 +599,7 @@ const _ProjectController = {
           collaberator_refs: 1, // used for link sharing analytics
           pendingEditor_refs: 1, // used for link sharing analytics
           reviewer_refs: 1,
+          webdavConfig: 1, // for WebDAV cloud storage settings
         }),
         userIsMemberOfGroupSubscription: sessionUser
           ? (async () =>
@@ -1035,6 +1036,13 @@ const _ProjectController = {
         hasTrackChangesFeature: Features.hasFeature('track-changes'),
         otMigrationStage: project.overleaf?.history?.otMigrationStage ?? 0,
         projectTags,
+        webdavConfig: project.webdavConfig ? {
+          url: project.webdavConfig.url,
+          username: project.webdavConfig.username,
+          basePath: project.webdavConfig.basePath,
+          enabled: project.webdavConfig.enabled,
+          // Note: password is not sent to frontend for security
+        } : null,
         isSaas: Features.hasFeature('saas'),
         shouldLoadHotjar,
         isOverleafAssistBundleEnabled,
