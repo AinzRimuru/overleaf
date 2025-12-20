@@ -18,12 +18,15 @@ module.exports = class SyncPersistor extends AbstractPersistor {
         }
 
         try {
+            Logger.info({ location }, 'checking webdav config for location')
             const config = await this.configProvider.getWebDAVConfig(location)
+            Logger.info({ location, config }, 'got webdav config')
             if (config && config.url && config.enabled) {
                 // Determine WebDAVPersistor class (lazy require to avoid circular dependency issues if any, though declared at top)
                 const WebDAVPersistor = require('./WebDAVPersistor')
                 const persistor = new WebDAVPersistor(config)
                 this.webdavPersistors.set(location, persistor)
+                Logger.info({ location }, 'initialized WebDAV persistor')
                 return persistor
             }
         } catch (err) {
@@ -127,6 +130,7 @@ module.exports = class SyncPersistor extends AbstractPersistor {
     }
 
     async syncFile(location, name) {
+        Logger.info({ location, name }, 'syncFile called')
         const sync = await this.getSyncPersistor(location)
         if (!sync) return
 
@@ -144,18 +148,22 @@ module.exports = class SyncPersistor extends AbstractPersistor {
             // Treat as missing
         }
 
+        Logger.info({ location, name, primaryMeta, syncMeta }, 'syncFile metadata comparison')
+
         if (!primaryMeta && !syncMeta) {
             return // Both missing
         }
 
         if (primaryMeta && !syncMeta) {
             // Local exists, remote missing -> Push
+            Logger.info({ location, name }, 'Pushing to remote (remote missing)')
             await this._syncToRemote(location, name)
             return
         }
 
         if (!primaryMeta && syncMeta) {
             // Remote exists, local missing -> Pull
+            Logger.info({ location, name }, 'Pulling from remote (local missing)')
             await this._syncToLocal(location, name)
             return
         }
@@ -166,21 +174,25 @@ module.exports = class SyncPersistor extends AbstractPersistor {
 
         if (syncTime > primaryTime) {
             // Remote newer -> Pull
+            Logger.info({ location, name, syncTime, primaryTime }, 'Pulling from remote (newer)')
             await this._syncToLocal(location, name)
         } else if (syncTime < primaryTime) {
             // Remote older -> Push
+            Logger.info({ location, name, syncTime, primaryTime }, 'Pushing to remote (newer)')
             await this._syncToRemote(location, name)
         }
         // Else equal -> No-op
     }
 
     async _syncToRemote(location, name) {
+        Logger.info({ location, name }, '_syncToRemote called')
         const sync = await this.getSyncPersistor(location)
         if (!sync) return
 
         try {
             const stream = await this.primary.getObjectStream(location, name)
             await sync.sendStream(location, name, stream)
+            Logger.info({ location, name }, '_syncToRemote success')
         } catch (err) {
             throw PersistorHelper.wrapError(
                 err,
@@ -192,12 +204,14 @@ module.exports = class SyncPersistor extends AbstractPersistor {
     }
 
     async _syncToLocal(location, name) {
+        Logger.info({ location, name }, '_syncToLocal called')
         const sync = await this.getSyncPersistor(location)
         if (!sync) return
 
         try {
             const stream = await sync.getObjectStream(location, name)
             await this.primary.sendStream(location, name, stream)
+            Logger.info({ location, name }, '_syncToLocal success')
         } catch (err) {
             throw PersistorHelper.wrapError(
                 err,
