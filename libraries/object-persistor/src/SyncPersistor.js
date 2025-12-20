@@ -3,6 +3,8 @@ const PersistorHelper = require('./PersistorHelper')
 const { WriteError } = require('./Errors')
 const Logger = require('@overleaf/logger')
 
+console.error(' [SyncPersistor] Module Loaded')
+
 module.exports = class SyncPersistor extends AbstractPersistor {
     constructor(primaryPersistor, configProvider) {
         super()
@@ -12,7 +14,9 @@ module.exports = class SyncPersistor extends AbstractPersistor {
     }
 
     async getSyncPersistor(location, name) {
+        console.error(` [SyncPersistor] getSyncPersistor location=${location} name=${name}`)
         let projectId = location
+
 
         // In filestore, location is the bucket name (e.g. 'filestore').
         // The projectId is part of the key (name), e.g. 'projectId/fileId'.

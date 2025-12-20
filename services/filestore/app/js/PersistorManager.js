@@ -9,6 +9,7 @@ const { SyncPersistor } = ObjectPersistor
 let persistor = ObjectPersistor(persistorSettings)
 
 // Wrap with dynamic SyncPersistor
+console.error(' [Filestore] Wrapping persistor with SyncPersistor')
 persistor = new SyncPersistor(persistor, ProjectConfigProvider)
 
 export default persistor
