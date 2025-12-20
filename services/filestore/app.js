@@ -10,7 +10,7 @@ import fileController from './app/js/FileController.js'
 import keyBuilder from './app/js/KeyBuilder.js'
 import RequestLogger from './app/js/RequestLogger.js'
 
-const ProjectConfigProvider = require('./app/js/ProjectConfigProvider.js')
+import ProjectConfigProvider from './app/js/ProjectConfigProvider.js'
 
 logger.initialize(process.env.METRICS_APP_NAME || 'filestore')
 
