@@ -1,6 +1,6 @@
 import { Project } from '../../models/Project.mjs'
 import DocstoreManager from '../Docstore/DocstoreManager.mjs'
-import FileStoreHandler from '../FileStore/FileStoreHandler.mjs'
+import HistoryManager from '../History/HistoryManager.mjs'
 import ProjectEntityHandler from './ProjectEntityHandler.mjs'
 import ProjectGetter from './ProjectGetter.mjs'
 import Logger from '@overleaf/logger'
@@ -151,6 +151,18 @@ const ProjectWebDAVSync = {
             const client = await this.createClient(config)
             const basePath = config.basePath || '/overleaf'
 
+            // Ensure base path directory exists
+            try {
+                const exists = await client.exists(basePath)
+                if (!exists) {
+                    await client.createDirectory(basePath)
+                    Logger.info({ projectId, basePath }, 'Created basePath directory on WebDAV')
+                }
+            } catch (err) {
+                // Directory might already exist or other error, log and continue
+                Logger.warn({ err, basePath }, 'Could not create basePath directory, continuing anyway')
+            }
+
             // Sync all documents
             for (const { path: docPath, doc } of docs) {
                 try {
@@ -166,7 +178,7 @@ const ProjectWebDAVSync = {
                         await this.ensureDirectoryExists(client, parentDir, basePath)
                     }
 
-                    await client.putFileContents(remotePath, content)
+                    await client.putFileContents(remotePath, content, { overwrite: true })
                     Logger.info({ projectId, docPath }, 'Document synced to WebDAV')
                 } catch (err) {
                     Logger.warn({ err, projectId, docPath: docPath }, 'Failed to sync document')
@@ -176,14 +188,20 @@ const ProjectWebDAVSync = {
             // Sync all files
             for (const { path: filePath, file } of files) {
                 try {
-                    const fileStream = await FileStoreHandler.promises.getFileStream(
+                    // Use HistoryManager to get file content via blob hash
+                    if (!file.hash) {
+                        Logger.warn({ projectId, filePath, fileId: file._id }, 'File missing hash, skipping')
+                        continue
+                    }
+
+                    const { stream } = await HistoryManager.promises.requestBlobWithProjectId(
                         projectId.toString(),
-                        file._id.toString()
+                        file.hash
                     )
 
                     // Read stream into buffer
                     const chunks = []
-                    for await (const chunk of fileStream) {
+                    for await (const chunk of stream) {
                         chunks.push(chunk)
                     }
                     const buffer = Buffer.concat(chunks)
@@ -194,7 +212,7 @@ const ProjectWebDAVSync = {
                         await this.ensureDirectoryExists(client, parentDir, basePath)
                     }
 
-                    await client.putFileContents(remotePath, buffer)
+                    await client.putFileContents(remotePath, buffer, { overwrite: true })
                     Logger.info({ projectId, filePath }, 'File synced to WebDAV')
                 } catch (err) {
                     Logger.warn({ err, projectId, filePath: filePath }, 'Failed to sync file')
