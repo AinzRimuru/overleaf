@@ -13,24 +13,46 @@ module.exports = class SyncPersistor extends AbstractPersistor {
         this.webdavPersistors = new Map() // Cache persistors by projectId
     }
 
+
     async getSyncPersistor(location, name) {
         console.error(` [SyncPersistor] getSyncPersistor location=${location} name=${name}`)
-        let projectId = location
+        let projectId = null
 
+        // Check if it's a valid 24-character MongoDB ObjectId
+        const isObjectId = key => /^[0-9a-f]{24}$/i.test(key)
 
         // In filestore, location is the bucket name (e.g. 'filestore').
         // The projectId is part of the key (name), e.g. 'projectId/fileId'.
-        const isObjectId = key => /^[0-9a-f]{24}$/i.test(key)
-
-        if (!isObjectId(location) && name) {
+        if (isObjectId(location)) {
+            projectId = location
+        } else if (name) {
             const parts = name.split('/')
+
+            // Check if first part is an ObjectId (filestore format: projectId/fileId)
             if (parts.length > 0 && isObjectId(parts[0])) {
                 projectId = parts[0]
             }
+            // Check for history-v1 format: abc/def/ghijklmnopqrstuvwx/XY/hash
+            // The first 3 parts form a reversed project key that needs to be reversed back
+            else if (parts.length >= 3) {
+                // For MongoDB ObjectId projects in history-v1, the format is:
+                // f87/37e/8357fadce1f4886496/... where each part is part of reversed ObjectId
+                const reversedPrefix = parts[0] + parts[1] + parts[2]
+                // Reverse it back
+                const potentialProjectId = reversedPrefix.split('').reverse().join('')
+                console.error(` [SyncPersistor] Trying to extract projectId from history-v1 format: reversed=${reversedPrefix} -> potential=${potentialProjectId}`)
+
+                if (isObjectId(potentialProjectId)) {
+                    projectId = potentialProjectId
+                }
+            }
         }
 
-        if (!isObjectId(projectId)) {
+        console.error(` [SyncPersistor] Extracted projectId=${projectId}`)
+
+        if (!projectId || !isObjectId(projectId)) {
             // If we can't determine the project ID, we can't sync.
+            console.error(` [SyncPersistor] Cannot determine projectId, skipping sync`)
             return null
         }
 
@@ -41,19 +63,25 @@ module.exports = class SyncPersistor extends AbstractPersistor {
         try {
             Logger.info({ location, projectId, name }, 'checking webdav config for project')
             const config = await this.configProvider.getWebDAVConfig(projectId)
+            console.error(` [SyncPersistor] WebDAV config for ${projectId}: ${JSON.stringify(config)}`)
             Logger.info({ location, projectId, config }, 'got webdav config')
             if (config && config.url && config.enabled) {
                 const WebDAVPersistor = require('./WebDAVPersistor')
                 const persistor = new WebDAVPersistor(config)
                 this.webdavPersistors.set(projectId, persistor)
                 Logger.info({ projectId }, 'initialized WebDAV persistor')
+                console.error(` [SyncPersistor] WebDAV persistor initialized for ${projectId}`)
                 return persistor
+            } else {
+                console.error(` [SyncPersistor] WebDAV config not enabled or missing: enabled=${config?.enabled}, url=${config?.url}`)
             }
         } catch (err) {
+            console.error(` [SyncPersistor] Error getting webdav config: ${err.message}`)
             Logger.warn({ err, location, projectId }, 'failed to get project webdav config')
         }
         return null
     }
+
 
     async sendFile(location, target, source) {
         console.error(` [SyncPersistor] sendFile called location=${location} target=${target}`)
