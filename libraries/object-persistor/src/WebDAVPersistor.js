@@ -138,7 +138,7 @@ module.exports = class WebDAVPersistor extends AbstractPersistor {
       const pass = new PassThrough();
       // Pipeline errors are handled by the pass stream's error event
       // This is consistent with FSPersistor pattern
-      pipeline(contentStream, observer, pass).catch(() => {});
+      pipeline(contentStream, observer, pass).catch(() => { });
       return pass;
     } catch (err) {
       throw PersistorHelper.wrapError(
@@ -399,6 +399,30 @@ module.exports = class WebDAVPersistor extends AbstractPersistor {
       if (err.status !== 405 && err.response?.status !== 405) {
         throw err;
       }
+    }
+  }
+
+  /**
+   * @param {string} location
+   * @param {string} name
+   * @return {Promise<{lastModified: Date, size: number}>}
+   */
+  async getObjectMetadata(location, name) {
+    const remotePath = this._buildRemotePath(location, name)
+
+    try {
+      const stat = await this.client.stat(remotePath)
+      return {
+        lastModified: new Date(stat.lastmod),
+        size: stat.size,
+      }
+    } catch (err) {
+      throw PersistorHelper.wrapError(
+        err,
+        'failed to get object metadata',
+        { location, name },
+        ReadError
+      )
     }
   }
 

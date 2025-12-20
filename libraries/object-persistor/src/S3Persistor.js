@@ -119,7 +119,7 @@ class S3Persistor extends AbstractPersistor {
 
       const observer = new PersistorHelper.ObserverStream(observeOptions)
       // observer will catch errors, clean up and log a warning
-      pipeline(readStream, observer, () => {})
+      pipeline(readStream, observer, () => { })
 
       /** @type {import('@aws-sdk/client-s3').PutObjectCommandInput} */
       const uploadOptions = {
@@ -367,6 +367,21 @@ class S3Persistor extends AbstractPersistor {
   async getObjectSize(bucketName, key, opts = {}) {
     const response = await this.#headObject(bucketName, key, opts)
     return response.ContentLength || 0
+  }
+
+  /**
+   * @param {string} bucketName
+   * @param {string} key
+   * @param {Object} opts
+   * @param {SSECOptions} [opts.ssecOptions]
+   * @return {Promise<{lastModified: Date, size: number}>}
+   */
+  async getObjectMetadata(bucketName, key, opts = {}) {
+    const response = await this.#headObject(bucketName, key, opts)
+    return {
+      lastModified: response.LastModified,
+      size: response.ContentLength || 0,
+    }
   }
 
   /**

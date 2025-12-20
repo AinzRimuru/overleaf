@@ -186,7 +186,7 @@ const settings = {
   // Status page URL as displayed on the maintenance/500 pages.
   statusPageUrl: process.env.OVERLEAF_STATUS_PAGE_URL
     ? // Add https:// protocol prefix if not set (Allow plain-text http:// for Server Pro/CE).
-      process.env.OVERLEAF_STATUS_PAGE_URL.startsWith('http://') ||
+    process.env.OVERLEAF_STATUS_PAGE_URL.startsWith('http://') ||
       process.env.OVERLEAF_STATUS_PAGE_URL.startsWith('https://')
       ? process.env.OVERLEAF_STATUS_PAGE_URL
       : `https://${process.env.OVERLEAF_STATUS_PAGE_URL}`
@@ -440,6 +440,7 @@ if (process.env.OVERLEAF_ELASTICSEARCH_URL != null) {
 switch (process.env.OVERLEAF_FILESTORE_BACKEND) {
   case 's3':
     settings.filestore = {
+      backend: 's3',
       stores: {
         template_files:
           process.env.OVERLEAF_FILESTORE_TEMPLATE_FILES_BUCKET_NAME,
@@ -463,6 +464,7 @@ switch (process.env.OVERLEAF_FILESTORE_BACKEND) {
     break
   default:
     settings.filestore = {
+      backend: 'fs',
       stores: {
         template_files: Path.join(DATA_DIR, 'template_files'),
 

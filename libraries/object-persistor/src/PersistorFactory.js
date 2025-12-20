@@ -9,6 +9,8 @@ const {
   PerProjectEncryptedS3Persistor,
 } = require("./PerProjectEncryptedS3Persistor");
 
+const SyncPersistor = require("./SyncPersistor");
+
 function getPersistor(backend, settings) {
   switch (backend) {
     case "aws-sdk":
@@ -23,8 +25,6 @@ function getPersistor(backend, settings) {
       });
     case "gcs":
       return new GcsPersistor(settings.gcs);
-    case "webdav":
-      return new WebDAVPersistor(settings.webdav);
     default:
       throw new SettingsError("unknown backend", { backend });
   }
@@ -43,6 +43,11 @@ module.exports = function create(settings) {
   }
 
   let persistor = getPersistor(settings.backend, settings);
+
+  if (settings.webdav) {
+    const syncPersistor = new WebDAVPersistor(settings.webdav);
+    persistor = new SyncPersistor(persistor, syncPersistor);
+  }
 
   if (settings.fallback && settings.fallback.backend) {
     const primary = persistor;

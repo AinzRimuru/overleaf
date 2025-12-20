@@ -99,7 +99,7 @@ module.exports = class FSPersistor extends AbstractPersistor {
     const stream = fs.createReadStream(null, opts)
     // Return a PassThrough stream with a minimal interface. It will buffer until the caller starts reading. It will emit errors from the source stream (Stream.pipeline passes errors along).
     const pass = new PassThrough()
-    pipeline(stream, observer, pass).catch(() => {})
+    pipeline(stream, observer, pass).catch(() => { })
     return pass
   }
 
@@ -286,6 +286,29 @@ module.exports = class FSPersistor extends AbstractPersistor {
     }
 
     return size
+  }
+
+  /**
+   * @param {string} location
+   * @param {string} name
+   * @return {Promise<{lastModified: Date, size: number}>}
+   */
+  async getObjectMetadata(location, name) {
+    const fsPath = this._getFsPath(location, name)
+    try {
+      const stat = await fsPromises.stat(fsPath)
+      return {
+        lastModified: stat.mtime,
+        size: stat.size,
+      }
+    } catch (err) {
+      throw PersistorHelper.wrapError(
+        err,
+        'failed to get object metadata',
+        { location, name, fsPath },
+        ReadError
+      )
+    }
   }
 
   async _writeStreamToTempFile(location, stream, opts = {}) {
