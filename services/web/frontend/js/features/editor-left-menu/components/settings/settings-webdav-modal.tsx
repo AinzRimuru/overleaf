@@ -39,7 +39,7 @@ export default function WebDAVSettingsModal({
     onSaved,
 }: Props) {
     const { t } = useTranslation()
-    const { _id: projectId } = useProjectContext()
+    const { projectId } = useProjectContext()
     const { isLoading, isError, error, runAsync } = useAsync()
 
     const [url, setUrl] = useState(currentConfig?.url || '')
