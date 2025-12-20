@@ -952,6 +952,7 @@
   "hotkey_to_lowercase": "改为小写",
   "hotkey_to_uppercase": "改为大写",
   "hotkey_toggle_comment": "切换评论",
+  "webdav_directory_not_empty": "目标 WebDAV 目录必须为空。请清除目录内容或选择一个新的目录。",
   "hotkey_toggle_review_panel": "切换审阅面板",
   "hotkey_toggle_track_changes": "切换历史记录",
   "hotkey_undo": "撤销",

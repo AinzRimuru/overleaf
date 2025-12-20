@@ -4,10 +4,32 @@ const { WriteError } = require('./Errors')
 const Logger = require('@overleaf/logger')
 
 module.exports = class SyncPersistor extends AbstractPersistor {
-    constructor(primaryPersistor, syncPersistor) {
+    constructor(primaryPersistor, configProvider) {
         super()
         this.primary = primaryPersistor
-        this.sync = syncPersistor
+        this.configProvider = configProvider
+        this.webdavPersistors = new Map() // Cache persistors by projectId
+    }
+
+    async getSyncPersistor(location) {
+        // location is effectively projectId in overleaf filestore context
+        if (this.webdavPersistors.has(location)) {
+            return this.webdavPersistors.get(location)
+        }
+
+        try {
+            const config = await this.configProvider.getWebDAVConfig(location)
+            if (config && config.url && config.enabled) {
+                // Determine WebDAVPersistor class (lazy require to avoid circular dependency issues if any, though declared at top)
+                const WebDAVPersistor = require('./WebDAVPersistor')
+                const persistor = new WebDAVPersistor(config)
+                this.webdavPersistors.set(location, persistor)
+                return persistor
+            }
+        } catch (err) {
+            Logger.warn({ err, location }, 'failed to get project webdav config')
+        }
+        return null
     }
 
     async sendFile(location, target, source) {
@@ -57,9 +79,11 @@ module.exports = class SyncPersistor extends AbstractPersistor {
 
     async deleteObject(location, name) {
         await this.primary.deleteObject(location, name)
-        // For delete, we should also delete from sync
         try {
-            await this.sync.deleteObject(location, name)
+            const sync = await this.getSyncPersistor(location)
+            if (sync) {
+                await sync.deleteObject(location, name)
+            }
         } catch (err) {
             Logger.warn({ err, location, name }, 'background delete from sync failed')
         }
@@ -68,7 +92,10 @@ module.exports = class SyncPersistor extends AbstractPersistor {
     async deleteDirectory(location, name, continuationToken) {
         await this.primary.deleteDirectory(location, name, continuationToken)
         try {
-            await this.sync.deleteDirectory(location, name, continuationToken)
+            const sync = await this.getSyncPersistor(location)
+            if (sync) {
+                await sync.deleteDirectory(location, name, continuationToken)
+            }
         } catch (err) {
             Logger.warn({ err, location, name }, 'background delete from sync failed')
         }
@@ -100,6 +127,9 @@ module.exports = class SyncPersistor extends AbstractPersistor {
     }
 
     async syncFile(location, name) {
+        const sync = await this.getSyncPersistor(location)
+        if (!sync) return
+
         let primaryMeta, syncMeta
 
         try {
@@ -109,7 +139,7 @@ module.exports = class SyncPersistor extends AbstractPersistor {
         }
 
         try {
-            syncMeta = await this.sync.getObjectMetadata(location, name)
+            syncMeta = await sync.getObjectMetadata(location, name)
         } catch (err) {
             // Treat as missing
         }
@@ -145,9 +175,12 @@ module.exports = class SyncPersistor extends AbstractPersistor {
     }
 
     async _syncToRemote(location, name) {
+        const sync = await this.getSyncPersistor(location)
+        if (!sync) return
+
         try {
             const stream = await this.primary.getObjectStream(location, name)
-            await this.sync.sendStream(location, name, stream)
+            await sync.sendStream(location, name, stream)
         } catch (err) {
             throw PersistorHelper.wrapError(
                 err,
@@ -159,8 +192,11 @@ module.exports = class SyncPersistor extends AbstractPersistor {
     }
 
     async _syncToLocal(location, name) {
+        const sync = await this.getSyncPersistor(location)
+        if (!sync) return
+
         try {
-            const stream = await this.sync.getObjectStream(location, name)
+            const stream = await sync.getObjectStream(location, name)
             await this.primary.sendStream(location, name, stream)
         } catch (err) {
             throw PersistorHelper.wrapError(

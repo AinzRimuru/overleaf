@@ -44,7 +44,7 @@ module.exports = function create(settings) {
 
   let persistor = getPersistor(settings.backend, settings);
 
-  if (settings.webdav) {
+  if (settings.webdav && settings.webdav.url) {
     const syncPersistor = new WebDAVPersistor(settings.webdav);
     persistor = new SyncPersistor(persistor, syncPersistor);
   }

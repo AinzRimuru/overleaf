@@ -330,9 +330,9 @@ const _ProjectController = {
 
     const project = await (template === 'example'
       ? ProjectCreationHandler.promises.createExampleProject(
-          userId,
-          projectName
-        )
+        userId,
+        projectName
+      )
       : ProjectCreationHandler.promises.createBasicProject(userId, projectName))
 
     // If webdavConfig is provided, validate and update the project
@@ -370,16 +370,23 @@ const _ProjectController = {
     res.sendStatus(200)
   },
 
-  async linkWebDAV(req, res) {
+  async linkWebDAV(req, res, next) {
     const { params, body } = validateReq(req, linkWebDAVSchema)
     const projectId = params.Project_id
     const { webdavConfig } = body
     const userId = SessionManager.getLoggedInUserId(req.session)
 
-    await ProjectUpdateHandler.promises.setWebDAVConfig(
-      projectId,
-      webdavConfig
-    )
+    try {
+      await ProjectUpdateHandler.promises.setWebDAVConfig(
+        projectId,
+        webdavConfig
+      )
+    } catch (err) {
+      if (err.info?.public?.message) {
+        return res.status(400).json({ message: err.info.public.message })
+      }
+      return next(err)
+    }
 
     ProjectAuditLogHandler.addEntryIfManagedInBackground(
       projectId,
@@ -595,11 +602,11 @@ const _ProjectController = {
         }),
         userIsMemberOfGroupSubscription: sessionUser
           ? (async () =>
-              (
-                await LimitationsManager.promises.userIsMemberOfGroupSubscription(
-                  sessionUser
-                )
-              ).isMember)()
+            (
+              await LimitationsManager.promises.userIsMemberOfGroupSubscription(
+                sessionUser
+              )
+            ).isMember)()
           : false,
         _flushToTpds:
           TpdsProjectFlusher.promises.flushProjectToTpdsIfNeeded(projectId),
@@ -657,8 +664,8 @@ const _ProjectController = {
 
       const brandVariation = project?.brandVariationId
         ? await BrandVariationsHandler.promises.getBrandVariationById(
-            project.brandVariationId
-          )
+          project.brandVariationId
+        )
         : undefined
 
       const anonRequestToken = TokenAccessHandler.getRequestToken(
@@ -715,7 +722,7 @@ const _ProjectController = {
         Settings.wsUrlV2 &&
         Settings.wsUrlV2Percentage > 0 &&
         (new ObjectId(projectId).getTimestamp() / 1000) % 100 <
-          Settings.wsUrlV2Percentage
+        Settings.wsUrlV2Percentage
       ) {
         wsUrl = Settings.wsUrlV2
         metricName += '-v2'
@@ -940,7 +947,7 @@ const _ProjectController = {
 
       const shouldLoadHotjar =
         splitTestAssignments['compile-timeout-target-plans']?.variant ===
-          'enabled' &&
+        'enabled' &&
         !userHasPremiumSub &&
         !userInNonIndividualSub
 
