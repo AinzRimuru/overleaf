@@ -44,6 +44,28 @@ const ProjectWebDAVSync = {
     },
 
     /**
+     * Get the modification time of a file on WebDAV
+     * Returns null if the file doesn't exist
+     */
+    async getRemoteFileModTime(client, remotePath) {
+        try {
+            const exists = await client.exists(remotePath)
+            if (!exists) {
+                return null
+            }
+            const stat = await client.stat(remotePath)
+            if (stat && stat.lastmod) {
+                return new Date(stat.lastmod)
+            }
+            return null
+        } catch (err) {
+            // File doesn't exist or error getting stats
+            Logger.debug({ err, remotePath }, 'Could not get remote file mod time')
+            return null
+        }
+    },
+
+    /**
      * Ensure directory exists on WebDAV
      */
     async ensureDirectoryExists(client, dirPath, basePath) {
@@ -126,6 +148,15 @@ const ProjectWebDAVSync = {
     /**
      * Sync all project files to WebDAV
      * This is useful for initial sync or full resync
+     * 
+     * Only syncs files if:
+     * 1. The file doesn't exist on WebDAV
+     * 2. The project has been modified (lastUpdated > lastSyncDate) AND 
+     *    the WebDAV file was last synced before the project's lastUpdated time
+     *    (i.e., remoteModTime < projectLastUpdated)
+     * 
+     * This ensures that only files that have potentially changed since the last 
+     * sync are re-uploaded, rather than all files.
      */
     async syncAllProjectFiles(projectId) {
         try {
@@ -140,10 +171,30 @@ const ProjectWebDAVSync = {
             const project = await ProjectGetter.promises.getProject(projectId, {
                 rootFolder: true,
                 name: true,
+                lastUpdated: true,
             })
 
             if (!project) {
                 Logger.warn({ projectId }, 'Project not found for WebDAV sync')
+                return
+            }
+
+            // Get project's last updated time for comparison
+            // This is used to determine if files need to be synced:
+            // - If a file on WebDAV has lastmod >= projectLastUpdated, it means
+            //   the file was synced after the last project modification, so no need to sync
+            // - If a file on WebDAV has lastmod < projectLastUpdated, it means
+            //   the file may have been modified since last sync, so we should sync it
+            const projectLastUpdated = project.lastUpdated ? new Date(project.lastUpdated) : null
+            const lastSyncDate = config.lastSyncDate ? new Date(config.lastSyncDate) : null
+
+            Logger.debug({ projectId, projectLastUpdated, lastSyncDate },
+                'Sync timing info')
+
+            // If project hasn't been updated since last sync, skip entirely
+            if (projectLastUpdated && lastSyncDate && projectLastUpdated <= lastSyncDate) {
+                Logger.info({ projectId, projectLastUpdated, lastSyncDate },
+                    'Project not modified since last sync, skipping')
                 return
             }
 
@@ -163,16 +214,33 @@ const ProjectWebDAVSync = {
                 Logger.warn({ err, basePath }, 'Could not create basePath directory, continuing anyway')
             }
 
+            let syncedDocsCount = 0
+            let skippedDocsCount = 0
+            let syncedFilesCount = 0
+            let skippedFilesCount = 0
+
             // Sync all documents
             for (const { path: docPath, doc } of docs) {
                 try {
+                    const remotePath = `${basePath}${docPath}`
+
+                    // Check if we need to sync this file based on modification time
+                    const remoteModTime = await this.getRemoteFileModTime(client, remotePath)
+
+                    // Skip if remote file exists and is newer than or equal to project's lastUpdated
+                    if (remoteModTime && projectLastUpdated && remoteModTime >= projectLastUpdated) {
+                        Logger.debug({ projectId, docPath, remoteModTime, projectLastUpdated },
+                            'Skipping document sync - remote file is up to date')
+                        skippedDocsCount++
+                        continue
+                    }
+
                     const docData = await DocstoreManager.promises.getDoc(
                         projectId.toString(),
                         doc._id.toString()
                     )
                     const content = docData.lines.join('\n')
 
-                    const remotePath = `${basePath}${docPath}`
                     const parentDir = docPath.substring(0, docPath.lastIndexOf('/'))
                     if (parentDir) {
                         await this.ensureDirectoryExists(client, parentDir, basePath)
@@ -180,6 +248,7 @@ const ProjectWebDAVSync = {
 
                     await client.putFileContents(remotePath, content, { overwrite: true })
                     Logger.info({ projectId, docPath }, 'Document synced to WebDAV')
+                    syncedDocsCount++
                 } catch (err) {
                     Logger.warn({ err, projectId, docPath: docPath }, 'Failed to sync document')
                 }
@@ -191,6 +260,19 @@ const ProjectWebDAVSync = {
                     // Use HistoryManager to get file content via blob hash
                     if (!file.hash) {
                         Logger.warn({ projectId, filePath, fileId: file._id }, 'File missing hash, skipping')
+                        continue
+                    }
+
+                    const remotePath = `${basePath}${filePath}`
+
+                    // Check if we need to sync this file based on modification time
+                    const remoteModTime = await this.getRemoteFileModTime(client, remotePath)
+
+                    // Skip if remote file exists and is newer than or equal to project's lastUpdated
+                    if (remoteModTime && projectLastUpdated && remoteModTime >= projectLastUpdated) {
+                        Logger.debug({ projectId, filePath, remoteModTime, projectLastUpdated },
+                            'Skipping file sync - remote file is up to date')
+                        skippedFilesCount++
                         continue
                     }
 
@@ -206,7 +288,6 @@ const ProjectWebDAVSync = {
                     }
                     const buffer = Buffer.concat(chunks)
 
-                    const remotePath = `${basePath}${filePath}`
                     const parentDir = filePath.substring(0, filePath.lastIndexOf('/'))
                     if (parentDir) {
                         await this.ensureDirectoryExists(client, parentDir, basePath)
@@ -214,6 +295,7 @@ const ProjectWebDAVSync = {
 
                     await client.putFileContents(remotePath, buffer, { overwrite: true })
                     Logger.info({ projectId, filePath }, 'File synced to WebDAV')
+                    syncedFilesCount++
                 } catch (err) {
                     Logger.warn({ err, projectId, filePath: filePath }, 'Failed to sync file')
                 }
@@ -225,8 +307,15 @@ const ProjectWebDAVSync = {
                 { $set: { 'webdavConfig.lastSyncDate': new Date() } }
             ).exec()
 
-            Logger.info({ projectId, docsCount: docs.length, filesCount: files.length },
-                'Full project sync to WebDAV completed')
+            Logger.info({
+                projectId,
+                syncedDocsCount,
+                skippedDocsCount,
+                syncedFilesCount,
+                skippedFilesCount,
+                totalDocs: docs.length,
+                totalFiles: files.length
+            }, 'Full project sync to WebDAV completed')
         } catch (err) {
             Logger.error({ err, projectId }, 'Failed to sync project to WebDAV')
             throw err
