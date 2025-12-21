@@ -110,9 +110,10 @@ export const ProjectSchema = new Schema(
       basePath: { type: String, default: '/overleaf' },
       enabled: { type: Boolean, default: false },
       lastSyncDate: { type: Date },
-      // Map of filePath -> fileHash for tracking synced files
-      // This allows accurate detection of changed files across sync cycles
-      syncedFileHashes: { type: Map, of: String },
+      // Object storing filePath -> fileHash for tracking synced files
+      // Uses Mixed type because Mongoose Map doesn't support keys with dots
+      // File paths are encoded using URL-style percent encoding (. -> %2E)
+      syncedFileHashes: { type: Schema.Types.Mixed, default: {} },
     },
   },
   { minimize: false }

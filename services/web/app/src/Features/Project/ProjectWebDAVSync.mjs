@@ -15,6 +15,25 @@ async function getWebDAVClient() {
     return webdavModule.createClient
 }
 
+// Helper functions to encode/decode file paths for MongoDB storage
+// MongoDB doesn't allow dots (.) or dollar signs ($) in field names
+// We use URL-style percent encoding which is well-known and handles edge cases
+function encodePathForStorage(path) {
+    // First encode % to prevent double-encoding issues, then encode . and $
+    return path
+        .replace(/%/g, '%25')   // Escape the escape character first
+        .replace(/\./g, '%2E')  // Then encode dots
+        .replace(/\$/g, '%24')  // Then encode dollar signs
+}
+
+function decodePathFromStorage(encodedPath) {
+    // Decode in reverse order
+    return encodedPath
+        .replace(/%24/g, '$')
+        .replace(/%2E/g, '.')
+        .replace(/%25/g, '%')
+}
+
 /**
  * ProjectWebDAVSync - Syncs project files to WebDAV with user-friendly paths
  * 
@@ -190,17 +209,16 @@ const ProjectWebDAVSync = {
             const lastSyncDate = config.lastSyncDate ? new Date(config.lastSyncDate) : null
 
             // Get the stored file hashes from previous syncs
-            // This is a Map of filePath -> fileHash
-            const syncedFileHashes = config.syncedFileHashes instanceof Map
-                ? new Map(config.syncedFileHashes)
-                : new Map(Object.entries(config.syncedFileHashes || {}))
+            // Keys are encoded paths (dots replaced with fullwidth equivalents)
+            // This is stored as a plain object in MongoDB
+            const storedHashes = config.syncedFileHashes || {}
 
             console.error(`[WebDAV] Sync timing info:`)
             console.error(`[WebDAV]   projectLastUpdated: ${projectLastUpdated ? projectLastUpdated.toISOString() : 'null'}`)
             console.error(`[WebDAV]   lastSyncDate: ${lastSyncDate ? lastSyncDate.toISOString() : 'null'}`)
-            console.error(`[WebDAV]   syncedFileHashes count: ${syncedFileHashes.size}`)
+            console.error(`[WebDAV]   syncedFileHashes count: ${Object.keys(storedHashes).length}`)
 
-            Logger.debug({ projectId, projectLastUpdated, lastSyncDate, syncedFileHashesCount: syncedFileHashes.size },
+            Logger.debug({ projectId, projectLastUpdated, lastSyncDate, syncedFileHashesCount: Object.keys(storedHashes).length },
                 'Sync timing info')
 
             // If project hasn't been updated since last sync, skip entirely
@@ -235,8 +253,8 @@ const ProjectWebDAVSync = {
             let syncedFilesCount = 0
             let skippedFilesCount = 0
 
-            // Track updated hashes for this sync
-            const updatedHashes = new Map(syncedFileHashes)
+            // Track updated hashes for this sync (using encoded paths as keys)
+            const updatedHashes = { ...storedHashes }
 
             // Sync all documents
             for (const { path: docPath, doc } of docs) {
@@ -252,7 +270,8 @@ const ProjectWebDAVSync = {
                     const contentHash = crypto.createHash('md5').update(content).digest('hex')
 
                     // Check if hash has changed since last sync
-                    const previousHash = syncedFileHashes.get(docPath)
+                    const encodedDocPath = encodePathForStorage(docPath)
+                    const previousHash = storedHashes[encodedDocPath]
 
                     console.error(`[WebDAV] Comparing doc ${docPath}:`)
                     console.error(`[WebDAV]   currentHash: ${contentHash}`)
@@ -276,8 +295,8 @@ const ProjectWebDAVSync = {
                     await client.putFileContents(remotePath, content, { overwrite: true })
                     Logger.info({ projectId, docPath }, 'Document synced to WebDAV')
 
-                    // Update the hash in our tracking map
-                    updatedHashes.set(docPath, contentHash)
+                    // Update the hash in our tracking map (with encoded path)
+                    updatedHashes[encodedDocPath] = contentHash
                     syncedDocsCount++
                 } catch (err) {
                     Logger.warn({ err, projectId, docPath: docPath }, 'Failed to sync document')
@@ -296,7 +315,8 @@ const ProjectWebDAVSync = {
                     const currentHash = file.hash
 
                     // Check if hash has changed since last sync
-                    const previousHash = syncedFileHashes.get(filePath)
+                    const encodedFilePath = encodePathForStorage(filePath)
+                    const previousHash = storedHashes[encodedFilePath]
 
                     console.error(`[WebDAV] Comparing file ${filePath}:`)
                     console.error(`[WebDAV]   currentHash: ${currentHash}`)
@@ -332,16 +352,15 @@ const ProjectWebDAVSync = {
                     await client.putFileContents(remotePath, buffer, { overwrite: true })
                     Logger.info({ projectId, filePath }, 'File synced to WebDAV')
 
-                    // Update the hash in our tracking map
-                    updatedHashes.set(filePath, currentHash)
+                    // Update the hash in our tracking map (with encoded path)
+                    updatedHashes[encodedFilePath] = currentHash
                     syncedFilesCount++
                 } catch (err) {
                     Logger.warn({ err, projectId, filePath: filePath }, 'Failed to sync file')
                 }
             }
 
-            // Convert Map to object for MongoDB storage
-            const hashesObject = Object.fromEntries(updatedHashes)
+            // updatedHashes is already an object with encoded paths as keys
 
             // Update last sync date and synced file hashes
             await Project.updateOne(
@@ -349,7 +368,7 @@ const ProjectWebDAVSync = {
                 {
                     $set: {
                         'webdavConfig.lastSyncDate': syncStartTime,
-                        'webdavConfig.syncedFileHashes': hashesObject
+                        'webdavConfig.syncedFileHashes': updatedHashes
                     }
                 }
             ).exec()
@@ -395,10 +414,11 @@ const ProjectWebDAVSync = {
                 // File already doesn't exist, ignore
             }
 
-            // Also remove the file hash from tracking
+            // Also remove the file hash from tracking (using encoded path)
+            const encodedPath = encodePathForStorage(filePath)
             await Project.updateOne(
                 { _id: projectId },
-                { $unset: { [`webdavConfig.syncedFileHashes.${filePath.replace(/\./g, '\\.')}`]: '' } }
+                { $unset: { [`webdavConfig.syncedFileHashes.${encodedPath}`]: '' } }
             ).exec()
         } catch (err) {
             Logger.warn({ err, projectId, filePath }, 'Failed to delete file from WebDAV')
@@ -439,19 +459,18 @@ const ProjectWebDAVSync = {
             }
 
             // Update the hash tracking: transfer hash from old path to new path
-            const syncedFileHashes = config.syncedFileHashes instanceof Map
-                ? config.syncedFileHashes
-                : new Map(Object.entries(config.syncedFileHashes || {}))
+            const storedHashes = config.syncedFileHashes || {}
+            const encodedOldPath = encodePathForStorage(oldPath)
+            const encodedNewPath = encodePathForStorage(newPath)
 
-            const hash = syncedFileHashes.get(oldPath)
+            const hash = storedHashes[encodedOldPath]
             if (hash) {
-                syncedFileHashes.delete(oldPath)
-                syncedFileHashes.set(newPath, hash)
+                delete storedHashes[encodedOldPath]
+                storedHashes[encodedNewPath] = hash
 
-                const hashesObject = Object.fromEntries(syncedFileHashes)
                 await Project.updateOne(
                     { _id: projectId },
-                    { $set: { 'webdavConfig.syncedFileHashes': hashesObject } }
+                    { $set: { 'webdavConfig.syncedFileHashes': storedHashes } }
                 ).exec()
             }
         } catch (err) {
