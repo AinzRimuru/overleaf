@@ -33,7 +33,6 @@ if (process.env.NODE_ENV === 'test') {
 }
 
 async function insertFile(bucket, key, stream) {
-  console.error(` [FileHandler] insertFile called bucket=${bucket} key=${key}`)
   const convertedKey = KeyBuilder.getConvertedFolderKey(key)
   if (
     !convertedKey.match(/^[0-9a-f]{24}\/([0-9a-f]{24}|v\/[0-9]+\/[a-z0-9]+)/i)
@@ -44,9 +43,7 @@ async function insertFile(bucket, key, stream) {
       convertedKey,
     })
   }
-  console.error(` [FileHandler] About to call PersistorManager.sendStream`)
   await PersistorManager.sendStream(bucket, key, stream)
-  console.error(` [FileHandler] PersistorManager.sendStream completed`)
 }
 
 async function getFile(bucket, key, opts) {
@@ -117,7 +114,7 @@ async function _getConvertedFileAndCache(bucket, key, convertedKey, opts) {
     await ImageOptimiser.promises.compressPng(convertedFsPath)
     await PersistorManager.sendFile(bucket, convertedKey, convertedFsPath)
   } catch (err) {
-    LocalFileWriter.deleteFile(convertedFsPath, () => { })
+    LocalFileWriter.deleteFile(convertedFsPath, () => {})
     throw new ConversionError(
       'failed to convert file',
       { opts, bucket, key, convertedKey },
@@ -138,10 +135,10 @@ async function _getConvertedFileAndCache(bucket, key, convertedKey, opts) {
   // https://docs.aws.amazon.com/AmazonS3/latest/dev/Introduction.html#ConsistencyModel
   const readStream = fs.createReadStream(convertedFsPath)
   readStream.on('error', function () {
-    LocalFileWriter.deleteFile(convertedFsPath, function () { })
+    LocalFileWriter.deleteFile(convertedFsPath, function () {})
   })
   readStream.on('end', function () {
-    LocalFileWriter.deleteFile(convertedFsPath, function () { })
+    LocalFileWriter.deleteFile(convertedFsPath, function () {})
   })
   return readStream
 }
@@ -182,7 +179,7 @@ async function _convertFile(bucket, originalKey, opts) {
       err
     )
   }
-  LocalFileWriter.deleteFile(originalFsPath, function () { })
+  LocalFileWriter.deleteFile(originalFsPath, function () {})
   return destPath
 }
 

@@ -29,9 +29,6 @@ persistorConfig.Metrics = metrics
 let persistor = objectPersistor(persistorConfig)
 
 // Wrap with SyncPersistor for WebDAV synchronization
-console.error(' [History-v1] Wrapping persistor with SyncPersistor')
 persistor = new SyncPersistor(persistor, ProjectConfigProvider)
-console.error(' [History-v1] Persistor wrapped successfully')
 
 module.exports = persistor
-
