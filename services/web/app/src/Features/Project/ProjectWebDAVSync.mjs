@@ -50,16 +50,21 @@ const ProjectWebDAVSync = {
     async getRemoteFileModTime(client, remotePath) {
         try {
             const exists = await client.exists(remotePath)
+            console.error(`[WebDAV] getRemoteFileModTime: ${remotePath} exists=${exists}`)
             if (!exists) {
                 return null
             }
             const stat = await client.stat(remotePath)
+            console.error(`[WebDAV] getRemoteFileModTime: ${remotePath} stat=${JSON.stringify(stat)}`)
             if (stat && stat.lastmod) {
-                return new Date(stat.lastmod)
+                const modTime = new Date(stat.lastmod)
+                console.error(`[WebDAV] getRemoteFileModTime: ${remotePath} lastmod=${stat.lastmod} parsed=${modTime.toISOString()}`)
+                return modTime
             }
             return null
         } catch (err) {
             // File doesn't exist or error getting stats
+            console.error(`[WebDAV] getRemoteFileModTime error: ${remotePath} err=${err.message}`)
             Logger.debug({ err, remotePath }, 'Could not get remote file mod time')
             return null
         }
@@ -188,11 +193,18 @@ const ProjectWebDAVSync = {
             const projectLastUpdated = project.lastUpdated ? new Date(project.lastUpdated) : null
             const lastSyncDate = config.lastSyncDate ? new Date(config.lastSyncDate) : null
 
+            console.error(`[WebDAV] Sync timing info:`)
+            console.error(`[WebDAV]   projectLastUpdated: ${projectLastUpdated ? projectLastUpdated.toISOString() : 'null'}`)
+            console.error(`[WebDAV]   lastSyncDate: ${lastSyncDate ? lastSyncDate.toISOString() : 'null'}`)
+            console.error(`[WebDAV]   project.lastUpdated raw: ${project.lastUpdated}`)
+            console.error(`[WebDAV]   config.lastSyncDate raw: ${config.lastSyncDate}`)
+
             Logger.debug({ projectId, projectLastUpdated, lastSyncDate },
                 'Sync timing info')
 
             // If project hasn't been updated since last sync, skip entirely
             if (projectLastUpdated && lastSyncDate && projectLastUpdated <= lastSyncDate) {
+                console.error(`[WebDAV] Project not modified since last sync, skipping entirely`)
                 Logger.info({ projectId, projectLastUpdated, lastSyncDate },
                     'Project not modified since last sync, skipping')
                 return
@@ -227,13 +239,21 @@ const ProjectWebDAVSync = {
                     // Check if we need to sync this file based on modification time
                     const remoteModTime = await this.getRemoteFileModTime(client, remotePath)
 
-                    // Skip if remote file exists and is newer than or equal to project's lastUpdated
-                    if (remoteModTime && projectLastUpdated && remoteModTime >= projectLastUpdated) {
-                        Logger.debug({ projectId, docPath, remoteModTime, projectLastUpdated },
-                            'Skipping document sync - remote file is up to date')
+                    console.error(`[WebDAV] Comparing doc ${docPath}:`)
+                    console.error(`[WebDAV]   remoteModTime: ${remoteModTime ? remoteModTime.toISOString() : 'null'}`)
+                    console.error(`[WebDAV]   lastSyncDate: ${lastSyncDate ? lastSyncDate.toISOString() : 'null'}`)
+                    console.error(`[WebDAV]   remoteModTime >= lastSyncDate: ${remoteModTime && lastSyncDate ? remoteModTime >= lastSyncDate : 'N/A'}`)
+
+                    // Skip if remote file exists and was last modified after last sync date
+                    // This means the file was already synced in the last sync operation
+                    if (remoteModTime && lastSyncDate && remoteModTime >= lastSyncDate) {
+                        console.error(`[WebDAV]   -> SKIPPING (already synced in last sync)`)
+                        Logger.debug({ projectId, docPath, remoteModTime, lastSyncDate },
+                            'Skipping document sync - already synced')
                         skippedDocsCount++
                         continue
                     }
+                    console.error(`[WebDAV]   -> SYNCING (not synced yet or file is newer)`)
 
                     const docData = await DocstoreManager.promises.getDoc(
                         projectId.toString(),
@@ -268,13 +288,21 @@ const ProjectWebDAVSync = {
                     // Check if we need to sync this file based on modification time
                     const remoteModTime = await this.getRemoteFileModTime(client, remotePath)
 
-                    // Skip if remote file exists and is newer than or equal to project's lastUpdated
-                    if (remoteModTime && projectLastUpdated && remoteModTime >= projectLastUpdated) {
-                        Logger.debug({ projectId, filePath, remoteModTime, projectLastUpdated },
-                            'Skipping file sync - remote file is up to date')
+                    console.error(`[WebDAV] Comparing file ${filePath}:`)
+                    console.error(`[WebDAV]   remoteModTime: ${remoteModTime ? remoteModTime.toISOString() : 'null'}`)
+                    console.error(`[WebDAV]   lastSyncDate: ${lastSyncDate ? lastSyncDate.toISOString() : 'null'}`)
+                    console.error(`[WebDAV]   remoteModTime >= lastSyncDate: ${remoteModTime && lastSyncDate ? remoteModTime >= lastSyncDate : 'N/A'}`)
+
+                    // Skip if remote file exists and was last modified after last sync date
+                    // This means the file was already synced in the last sync operation
+                    if (remoteModTime && lastSyncDate && remoteModTime >= lastSyncDate) {
+                        console.error(`[WebDAV]   -> SKIPPING (already synced in last sync)`)
+                        Logger.debug({ projectId, filePath, remoteModTime, lastSyncDate },
+                            'Skipping file sync - already synced')
                         skippedFilesCount++
                         continue
                     }
+                    console.error(`[WebDAV]   -> SYNCING (not synced yet or newer)`)
 
                     const { stream } = await HistoryManager.promises.requestBlobWithProjectId(
                         projectId.toString(),
