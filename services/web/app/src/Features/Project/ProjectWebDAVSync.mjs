@@ -4,6 +4,7 @@ import HistoryManager from '../History/HistoryManager.mjs'
 import ProjectEntityHandler from './ProjectEntityHandler.mjs'
 import ProjectGetter from './ProjectGetter.mjs'
 import Logger from '@overleaf/logger'
+import crypto from 'crypto'
 
 // Dynamic import for WebDAV client
 let webdavModule = null
@@ -185,21 +186,21 @@ const ProjectWebDAVSync = {
             }
 
             // Get project's last updated time for comparison
-            // This is used to determine if files need to be synced:
-            // - If a file on WebDAV has lastmod >= projectLastUpdated, it means
-            //   the file was synced after the last project modification, so no need to sync
-            // - If a file on WebDAV has lastmod < projectLastUpdated, it means
-            //   the file may have been modified since last sync, so we should sync it
             const projectLastUpdated = project.lastUpdated ? new Date(project.lastUpdated) : null
             const lastSyncDate = config.lastSyncDate ? new Date(config.lastSyncDate) : null
+
+            // Get the stored file hashes from previous syncs
+            // This is a Map of filePath -> fileHash
+            const syncedFileHashes = config.syncedFileHashes instanceof Map
+                ? new Map(config.syncedFileHashes)
+                : new Map(Object.entries(config.syncedFileHashes || {}))
 
             console.error(`[WebDAV] Sync timing info:`)
             console.error(`[WebDAV]   projectLastUpdated: ${projectLastUpdated ? projectLastUpdated.toISOString() : 'null'}`)
             console.error(`[WebDAV]   lastSyncDate: ${lastSyncDate ? lastSyncDate.toISOString() : 'null'}`)
-            console.error(`[WebDAV]   project.lastUpdated raw: ${project.lastUpdated}`)
-            console.error(`[WebDAV]   config.lastSyncDate raw: ${config.lastSyncDate}`)
+            console.error(`[WebDAV]   syncedFileHashes count: ${syncedFileHashes.size}`)
 
-            Logger.debug({ projectId, projectLastUpdated, lastSyncDate },
+            Logger.debug({ projectId, projectLastUpdated, lastSyncDate, syncedFileHashesCount: syncedFileHashes.size },
                 'Sync timing info')
 
             // If project hasn't been updated since last sync, skip entirely
@@ -214,9 +215,7 @@ const ProjectWebDAVSync = {
             const client = await this.createClient(config)
             const basePath = config.basePath || '/overleaf'
 
-            // Record sync start time - this will be used to update lastSyncDate
-            // Files uploaded during this sync will have lastmod >= syncStartTime
-            // So in the next sync, we can correctly identify them as already synced
+            // Record sync start time
             const syncStartTime = new Date()
             console.error(`[WebDAV]   syncStartTime: ${syncStartTime.toISOString()}`)
 
@@ -228,7 +227,6 @@ const ProjectWebDAVSync = {
                     Logger.info({ projectId, basePath }, 'Created basePath directory on WebDAV')
                 }
             } catch (err) {
-                // Directory might already exist or other error, log and continue
                 Logger.warn({ err, basePath }, 'Could not create basePath directory, continuing anyway')
             }
 
@@ -237,36 +235,39 @@ const ProjectWebDAVSync = {
             let syncedFilesCount = 0
             let skippedFilesCount = 0
 
+            // Track updated hashes for this sync
+            const updatedHashes = new Map(syncedFileHashes)
+
             // Sync all documents
             for (const { path: docPath, doc } of docs) {
                 try {
-                    const remotePath = `${basePath}${docPath}`
-
-                    // Check if we need to sync this file based on modification time
-                    const remoteModTime = await this.getRemoteFileModTime(client, remotePath)
-
-                    console.error(`[WebDAV] Comparing doc ${docPath}:`)
-                    console.error(`[WebDAV]   remoteModTime: ${remoteModTime ? remoteModTime.toISOString() : 'null'}`)
-                    console.error(`[WebDAV]   lastSyncDate: ${lastSyncDate ? lastSyncDate.toISOString() : 'null'}`)
-                    console.error(`[WebDAV]   remoteModTime >= lastSyncDate: ${remoteModTime && lastSyncDate ? remoteModTime >= lastSyncDate : 'N/A'}`)
-
-                    // Skip if remote file exists and was last modified after last sync date
-                    // This means the file was already synced in the last sync operation
-                    if (remoteModTime && lastSyncDate && remoteModTime >= lastSyncDate) {
-                        console.error(`[WebDAV]   -> SKIPPING (already synced in last sync)`)
-                        Logger.debug({ projectId, docPath, remoteModTime, lastSyncDate },
-                            'Skipping document sync - already synced')
-                        skippedDocsCount++
-                        continue
-                    }
-                    console.error(`[WebDAV]   -> SYNCING (not synced yet or file is newer)`)
-
+                    // Get document content first to compute hash
                     const docData = await DocstoreManager.promises.getDoc(
                         projectId.toString(),
                         doc._id.toString()
                     )
                     const content = docData.lines.join('\n')
 
+                    // Compute hash of document content
+                    const contentHash = crypto.createHash('md5').update(content).digest('hex')
+
+                    // Check if hash has changed since last sync
+                    const previousHash = syncedFileHashes.get(docPath)
+
+                    console.error(`[WebDAV] Comparing doc ${docPath}:`)
+                    console.error(`[WebDAV]   currentHash: ${contentHash}`)
+                    console.error(`[WebDAV]   previousHash: ${previousHash || 'null'}`)
+
+                    if (previousHash && previousHash === contentHash) {
+                        console.error(`[WebDAV]   -> SKIPPING (hash unchanged)`)
+                        Logger.debug({ projectId, docPath, contentHash },
+                            'Skipping document sync - hash unchanged')
+                        skippedDocsCount++
+                        continue
+                    }
+                    console.error(`[WebDAV]   -> SYNCING (hash changed or new file)`)
+
+                    const remotePath = `${basePath}${docPath}`
                     const parentDir = docPath.substring(0, docPath.lastIndexOf('/'))
                     if (parentDir) {
                         await this.ensureDirectoryExists(client, parentDir, basePath)
@@ -274,6 +275,9 @@ const ProjectWebDAVSync = {
 
                     await client.putFileContents(remotePath, content, { overwrite: true })
                     Logger.info({ projectId, docPath }, 'Document synced to WebDAV')
+
+                    // Update the hash in our tracking map
+                    updatedHashes.set(docPath, contentHash)
                     syncedDocsCount++
                 } catch (err) {
                     Logger.warn({ err, projectId, docPath: docPath }, 'Failed to sync document')
@@ -283,32 +287,29 @@ const ProjectWebDAVSync = {
             // Sync all files
             for (const { path: filePath, file } of files) {
                 try {
-                    // Use HistoryManager to get file content via blob hash
+                    // Use file.hash directly - this is already available
                     if (!file.hash) {
                         Logger.warn({ projectId, filePath, fileId: file._id }, 'File missing hash, skipping')
                         continue
                     }
 
-                    const remotePath = `${basePath}${filePath}`
+                    const currentHash = file.hash
 
-                    // Check if we need to sync this file based on modification time
-                    const remoteModTime = await this.getRemoteFileModTime(client, remotePath)
+                    // Check if hash has changed since last sync
+                    const previousHash = syncedFileHashes.get(filePath)
 
                     console.error(`[WebDAV] Comparing file ${filePath}:`)
-                    console.error(`[WebDAV]   remoteModTime: ${remoteModTime ? remoteModTime.toISOString() : 'null'}`)
-                    console.error(`[WebDAV]   lastSyncDate: ${lastSyncDate ? lastSyncDate.toISOString() : 'null'}`)
-                    console.error(`[WebDAV]   remoteModTime >= lastSyncDate: ${remoteModTime && lastSyncDate ? remoteModTime >= lastSyncDate : 'N/A'}`)
+                    console.error(`[WebDAV]   currentHash: ${currentHash}`)
+                    console.error(`[WebDAV]   previousHash: ${previousHash || 'null'}`)
 
-                    // Skip if remote file exists and was last modified after last sync date
-                    // This means the file was already synced in the last sync operation
-                    if (remoteModTime && lastSyncDate && remoteModTime >= lastSyncDate) {
-                        console.error(`[WebDAV]   -> SKIPPING (already synced in last sync)`)
-                        Logger.debug({ projectId, filePath, remoteModTime, lastSyncDate },
-                            'Skipping file sync - already synced')
+                    if (previousHash && previousHash === currentHash) {
+                        console.error(`[WebDAV]   -> SKIPPING (hash unchanged)`)
+                        Logger.debug({ projectId, filePath, currentHash },
+                            'Skipping file sync - hash unchanged')
                         skippedFilesCount++
                         continue
                     }
-                    console.error(`[WebDAV]   -> SYNCING (not synced yet or newer)`)
+                    console.error(`[WebDAV]   -> SYNCING (hash changed or new file)`)
 
                     const { stream } = await HistoryManager.promises.requestBlobWithProjectId(
                         projectId.toString(),
@@ -322,6 +323,7 @@ const ProjectWebDAVSync = {
                     }
                     const buffer = Buffer.concat(chunks)
 
+                    const remotePath = `${basePath}${filePath}`
                     const parentDir = filePath.substring(0, filePath.lastIndexOf('/'))
                     if (parentDir) {
                         await this.ensureDirectoryExists(client, parentDir, basePath)
@@ -329,20 +331,30 @@ const ProjectWebDAVSync = {
 
                     await client.putFileContents(remotePath, buffer, { overwrite: true })
                     Logger.info({ projectId, filePath }, 'File synced to WebDAV')
+
+                    // Update the hash in our tracking map
+                    updatedHashes.set(filePath, currentHash)
                     syncedFilesCount++
                 } catch (err) {
                     Logger.warn({ err, projectId, filePath: filePath }, 'Failed to sync file')
                 }
             }
 
-            // Update last sync date to the sync START time (not end time!)
-            // This ensures that files uploaded during this sync have lastmod >= lastSyncDate
-            // so they won't be re-uploaded in the next sync
+            // Convert Map to object for MongoDB storage
+            const hashesObject = Object.fromEntries(updatedHashes)
+
+            // Update last sync date and synced file hashes
             await Project.updateOne(
                 { _id: projectId },
-                { $set: { 'webdavConfig.lastSyncDate': syncStartTime } }
+                {
+                    $set: {
+                        'webdavConfig.lastSyncDate': syncStartTime,
+                        'webdavConfig.syncedFileHashes': hashesObject
+                    }
+                }
             ).exec()
             console.error(`[WebDAV] Updated lastSyncDate to syncStartTime: ${syncStartTime.toISOString()}`)
+            console.error(`[WebDAV] Updated syncedFileHashes: ${updatedHashes.size} entries`)
 
             Logger.info({
                 projectId,
@@ -382,6 +394,12 @@ const ProjectWebDAVSync = {
                 }
                 // File already doesn't exist, ignore
             }
+
+            // Also remove the file hash from tracking
+            await Project.updateOne(
+                { _id: projectId },
+                { $unset: { [`webdavConfig.syncedFileHashes.${filePath.replace(/\./g, '\\.')}`]: '' } }
+            ).exec()
         } catch (err) {
             Logger.warn({ err, projectId, filePath }, 'Failed to delete file from WebDAV')
         }
@@ -418,6 +436,23 @@ const ProjectWebDAVSync = {
                 } else {
                     throw err
                 }
+            }
+
+            // Update the hash tracking: transfer hash from old path to new path
+            const syncedFileHashes = config.syncedFileHashes instanceof Map
+                ? config.syncedFileHashes
+                : new Map(Object.entries(config.syncedFileHashes || {}))
+
+            const hash = syncedFileHashes.get(oldPath)
+            if (hash) {
+                syncedFileHashes.delete(oldPath)
+                syncedFileHashes.set(newPath, hash)
+
+                const hashesObject = Object.fromEntries(syncedFileHashes)
+                await Project.updateOne(
+                    { _id: projectId },
+                    { $set: { 'webdavConfig.syncedFileHashes': hashesObject } }
+                ).exec()
             }
         } catch (err) {
             Logger.warn({ err, projectId, oldPath, newPath }, 'Failed to move file on WebDAV')

@@ -110,6 +110,9 @@ export const ProjectSchema = new Schema(
       basePath: { type: String, default: '/overleaf' },
       enabled: { type: Boolean, default: false },
       lastSyncDate: { type: Date },
+      // Map of filePath -> fileHash for tracking synced files
+      // This allows accurate detection of changed files across sync cycles
+      syncedFileHashes: { type: Map, of: String },
     },
   },
   { minimize: false }
