@@ -119,7 +119,7 @@ class S3Persistor extends AbstractPersistor {
 
       const observer = new PersistorHelper.ObserverStream(observeOptions)
       // observer will catch errors, clean up and log a warning
-      pipeline(readStream, observer, () => { })
+      pipeline(readStream, observer, () => {})
 
       /** @type {import('@aws-sdk/client-s3').PutObjectCommandInput} */
       const uploadOptions = {

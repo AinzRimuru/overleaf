@@ -99,7 +99,7 @@ module.exports = class FSPersistor extends AbstractPersistor {
     const stream = fs.createReadStream(null, opts)
     // Return a PassThrough stream with a minimal interface. It will buffer until the caller starts reading. It will emit errors from the source stream (Stream.pipeline passes errors along).
     const pass = new PassThrough()
-    pipeline(stream, observer, pass).catch(() => { })
+    pipeline(stream, observer, pass).catch(() => {})
     return pass
   }
 
