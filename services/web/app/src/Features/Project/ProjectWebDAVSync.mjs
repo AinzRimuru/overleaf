@@ -214,6 +214,12 @@ const ProjectWebDAVSync = {
             const client = await this.createClient(config)
             const basePath = config.basePath || '/overleaf'
 
+            // Record sync start time - this will be used to update lastSyncDate
+            // Files uploaded during this sync will have lastmod >= syncStartTime
+            // So in the next sync, we can correctly identify them as already synced
+            const syncStartTime = new Date()
+            console.error(`[WebDAV]   syncStartTime: ${syncStartTime.toISOString()}`)
+
             // Ensure base path directory exists
             try {
                 const exists = await client.exists(basePath)
@@ -329,11 +335,14 @@ const ProjectWebDAVSync = {
                 }
             }
 
-            // Update last sync date
+            // Update last sync date to the sync START time (not end time!)
+            // This ensures that files uploaded during this sync have lastmod >= lastSyncDate
+            // so they won't be re-uploaded in the next sync
             await Project.updateOne(
                 { _id: projectId },
-                { $set: { 'webdavConfig.lastSyncDate': new Date() } }
+                { $set: { 'webdavConfig.lastSyncDate': syncStartTime } }
             ).exec()
+            console.error(`[WebDAV] Updated lastSyncDate to syncStartTime: ${syncStartTime.toISOString()}`)
 
             Logger.info({
                 projectId,
